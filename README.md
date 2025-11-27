@@ -18,6 +18,7 @@ No cloud bills. No vendor lock-in. No permission required.
 |---------|-----|--------|
 | Authentik SSO | https://auth.lab.axiomlayer.com | Running |
 | ArgoCD | https://argocd.lab.axiomlayer.com | Running |
+| Grafana | https://grafana.lab.axiomlayer.com | Running |
 | Telnet Metrics | https://telnet.lab.axiomlayer.com/metrics | Running |
 
 ## Architecture
@@ -42,6 +43,7 @@ No cloud bills. No vendor lock-in. No permission required.
 | Longhorn | Distributed storage |
 | CloudNativePG | PostgreSQL (3-node HA) |
 | Loki + Promtail | Log aggregation |
+| Prometheus + Grafana | Metrics and dashboards |
 
 #### Platform Layer
 | Component | Purpose |
@@ -396,8 +398,8 @@ Any x86_64 or ARM64 machines with 8GB+ RAM work.
 - [x] Distributed storage (Longhorn)
 - [x] PostgreSQL HA (CloudNativePG)
 - [x] Logging (Loki + Promtail)
-- [ ] Prometheus + Grafana (observability dashboards)
-- [ ] GitHub Actions CI pipeline
+- [x] Prometheus + Grafana (observability dashboards)
+- [x] GitHub Actions CI pipeline
 - [ ] Business ops suite (Plane, Outline, etc.)
 - [ ] CLI installer
 - [ ] Documentation site
