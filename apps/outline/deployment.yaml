@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outline
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline
+    app.kubernetes.io/component: wiki
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: outline
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: outline
+        app.kubernetes.io/component: wiki
+        app.kubernetes.io/part-of: homelab
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: outline
+        image: outlinewiki/outline:0.81.1
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+        ports:
+        - containerPort: 3000
+          name: http
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /_health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /_health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: URL
+          value: "https://docs.lab.axiomlayer.com"
+        - name: PORT
+          value: "3000"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: outline-secrets
+              key: database-url
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: outline-secrets
+              key: secret-key
+        - name: UTILS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: outline-secrets
+              key: utils-secret
+        - name: FILE_STORAGE
+          value: "local"
+        - name: FILE_STORAGE_LOCAL_ROOT_DIR
+          value: "/var/lib/outline/data"
+        - name: OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: outline-secrets
+              key: oidc-client-id
+        - name: OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: outline-secrets
+              key: oidc-client-secret
+        - name: OIDC_AUTH_URI
+          value: "https://auth.lab.axiomlayer.com/application/o/authorize/"
+        - name: OIDC_TOKEN_URI
+          value: "https://auth.lab.axiomlayer.com/application/o/token/"
+        - name: OIDC_USERINFO_URI
+          value: "https://auth.lab.axiomlayer.com/application/o/userinfo/"
+        - name: OIDC_DISPLAY_NAME
+          value: "Authentik"
+        - name: OIDC_USERNAME_CLAIM
+          value: "preferred_username"
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/outline/data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: outline-data

@@ -1,0 +1,29 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: outline-db
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline-db
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
+spec:
+  instances: 1
+
+  storage:
+    size: 5Gi
+    storageClass: longhorn
+
+  postgresql:
+    parameters:
+      max_connections: "50"
+      shared_buffers: "128MB"
+
+  bootstrap:
+    initdb:
+      database: outline
+      owner: outline
+
+  monitoring:
+    enablePodMonitor: true
