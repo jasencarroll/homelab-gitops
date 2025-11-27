@@ -3,6 +3,9 @@ kind: ConfigMap
 metadata:
   name: argocd-cm
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
 data:
   url: https://argocd.lab.axiomlayer.com
   oidc.config: |
@@ -17,7 +20,11 @@ kind: ConfigMap
 metadata:
   name: argocd-cmd-params-cm
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cmd-params-cm
+    app.kubernetes.io/part-of: argocd
 data:
+  # TLS termination at Traefik ingress, ArgoCD handles HTTP internally
   server.insecure: "true"
 ---
 apiVersion: v1
@@ -25,6 +32,9 @@ kind: ConfigMap
 metadata:
   name: argocd-rbac-cm
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
 data:
   policy.csv: |
     g, jasen, role:admin

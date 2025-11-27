@@ -3,5 +3,10 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - certificate.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: argocd
+      app.kubernetes.io/part-of: homelab
+    includeSelectors: false
 # Note: Authentik is deployed via Helm
 # values.yaml is provided for reference
