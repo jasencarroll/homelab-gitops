@@ -98,20 +98,37 @@ spec:
             secretKeyRef:
               name: n8n-secrets
               key: encryption-key
-        # SSO via Authentik forward auth headers
+        # SSO via Authentik OIDC
         - name: N8N_AUTH_EXCLUDE_ENDPOINTS
           value: "healthz"
         - name: N8N_USER_MANAGEMENT_DISABLED
-          value: "true"
-        - name: N8N_EXTERNAL_JWT_AUTH_ENABLED
           value: "false"
-        # Use header-based auth from Authentik forward proxy
-        - name: N8N_AUTH_HEADER_ENABLED
+        # OIDC Configuration
+        - name: N8N_SSO_ENABLED
           value: "true"
-        - name: N8N_AUTH_HEADER_NAME
-          value: "X-authentik-email"
-        - name: N8N_AUTH_HEADER_VALUE_PREFIX
-          value: ""
+        - name: N8N_SSO_JUST_IN_TIME_PROVISIONING
+          value: "true"
+        - name: N8N_SSO_EMAIL_CLAIM
+          value: "email"
+        - name: N8N_SSO_FIRST_NAME_CLAIM
+          value: "given_name"
+        - name: N8N_SSO_LAST_NAME_CLAIM
+          value: "family_name"
+        - name: N8N_SSO_OIDC_CLIENT_ID
+          value: "NIWC1dBhua4zFg6TW7bOaFjaYJfPapbIEO8p72k5YEqkJ6tjvKH4LtUctx25KDQHqfWCqKRKmuHAN7UWRVVN6FG8Mv3oTpK2T9VmpAKiuFnMUPOs44Q8yozdfeXyuWV9"
+        - name: N8N_SSO_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: oidc-client-secret
+        - name: N8N_SSO_OIDC_ISSUER
+          value: "https://auth.lab.axiomlayer.com/application/o/n8n/"
+        - name: N8N_SSO_OIDC_AUTHORIZATION_ENDPOINT
+          value: "https://auth.lab.axiomlayer.com/application/o/authorize/"
+        - name: N8N_SSO_OIDC_TOKEN_ENDPOINT
+          value: "https://auth.lab.axiomlayer.com/application/o/token/"
+        - name: N8N_SSO_OIDC_USERINFO_ENDPOINT
+          value: "https://auth.lab.axiomlayer.com/application/o/userinfo/"
         volumeMounts:
         - name: data
           mountPath: /home/node/.n8n
