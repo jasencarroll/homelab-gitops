@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: telnet-server
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jasencarroll/homelab-gitops.git
+    targetRevision: main
+    path: apps/telnet-server
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: telnet-server
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

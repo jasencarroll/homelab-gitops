@@ -5,6 +5,9 @@ resources:
   - certificate.yaml
   - ingress.yaml
   - configmaps.yaml
-  - secrets.yaml
-# Note: ArgoCD base install is from upstream manifest:
-# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+  - sealed-secret.yaml
+  - applications/cert-manager.yaml
+  - applications/authentik.yaml
+  - applications/longhorn.yaml
+  - applications/cloudnative-pg.yaml
+  - applications/telnet-server.yaml
