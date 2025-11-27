@@ -8,7 +8,7 @@ data:
   oidc.config: |
     name: Authentik
     issuer: https://auth.lab.axiomlayer.com/application/o/argo-cd/
-    clientID: REPLACE_ME
+    clientID: iaGtb1GzmpQZ3ZpawkveUORRu5xnsyUl6hxEsXVH
     clientSecret: $oidc.authentik.clientSecret
     requestedScopes: ["openid", "profile", "email"]
 ---
@@ -26,6 +26,7 @@ metadata:
   name: argocd-rbac-cm
   namespace: argocd
 data:
+  policy.default: role:admin
   policy.csv: |
     g, jasen, role:admin
-  scopes: "[email]"
+  scopes: "[email, groups]"
