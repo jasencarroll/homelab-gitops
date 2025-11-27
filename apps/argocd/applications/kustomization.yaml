@@ -4,6 +4,7 @@ resources:
   - authentik.yaml
   - cert-manager.yaml
   - cloudnative-pg.yaml
+  - external-dns.yaml
   - longhorn.yaml
   - telnet-server.yaml
   - loki.yaml
