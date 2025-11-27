@@ -5,7 +5,7 @@ resources:
   - certificate.yaml
   - ingress.yaml
   - configmaps.yaml
-  - sealed-secret.yaml
+  - secrets.yaml
   - applications/cert-manager.yaml
   - applications/authentik.yaml
   - applications/longhorn.yaml
