@@ -1,6 +1,6 @@
 # Secrets - never commit real secrets
 *.secret.yaml
-*-secret.yaml
+secrets.yaml
 
 # Local files
 .DS_Store
