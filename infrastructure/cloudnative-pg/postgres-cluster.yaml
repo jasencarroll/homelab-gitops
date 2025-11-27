@@ -14,14 +14,6 @@ spec:
     size: 10Gi
     storageClass: longhorn
 
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi
-    limits:
-      cpu: 2000m
-      memory: 2Gi
-
   postgresql:
     parameters:
       max_connections: "100"
