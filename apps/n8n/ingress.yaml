@@ -15,10 +15,10 @@ spec:
   ingressClassName: traefik
   tls:
   - hosts:
-    - n8n.lab.axiomlayer.com
-    secretName: n8n-tls
+    - autom8.lab.axiomlayer.com
+    secretName: autom8-tls
   rules:
-  - host: n8n.lab.axiomlayer.com
+  - host: autom8.lab.axiomlayer.com
     http:
       paths:
       - path: /

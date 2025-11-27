@@ -1,7 +1,7 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: n8n-tls
+  name: autom8-tls
   namespace: n8n
   labels:
     app.kubernetes.io/name: n8n
@@ -9,9 +9,9 @@ metadata:
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 spec:
-  secretName: n8n-tls
+  secretName: autom8-tls
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - n8n.lab.axiomlayer.com
+    - autom8.lab.axiomlayer.com
