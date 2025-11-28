@@ -594,11 +594,13 @@ data:
             document.getElementById('cpu-detail').textContent = cores ? `${cores} cores across cluster` : 'Cluster average';
           }
 
-          // Memory Usage
+          // Memory Usage (excluding cache/buffers)
           const memTotal = await queryPrometheus('sum(node_memory_MemTotal_bytes)');
-          const memAvail = await queryPrometheus('sum(node_memory_MemAvailable_bytes)');
-          if (memTotal !== null && memAvail !== null) {
-            const memUsed = memTotal - memAvail;
+          const memFree = await queryPrometheus('sum(node_memory_MemFree_bytes)');
+          const memBuffers = await queryPrometheus('sum(node_memory_Buffers_bytes)');
+          const memCached = await queryPrometheus('sum(node_memory_Cached_bytes)');
+          if (memTotal !== null && memFree !== null && memBuffers !== null && memCached !== null) {
+            const memUsed = memTotal - memFree - memBuffers - memCached;
             const memPercent = (memUsed / memTotal) * 100;
             document.getElementById('memory-value').textContent = memPercent.toFixed(1) + '%';
             addToHistory('memory', memPercent);
@@ -641,13 +643,18 @@ data:
             drawSparkline('cpu-graph', history.cpu, colors.cpu, 100);
           }
 
-          // Memory history
+          // Memory history (excluding cache/buffers)
           const memTotalHist = await queryPrometheusRange('sum(node_memory_MemTotal_bytes)', '5m', '10s');
-          const memAvailHist = await queryPrometheusRange('sum(node_memory_MemAvailable_bytes)', '5m', '10s');
-          if (memTotalHist.length > 0 && memAvailHist.length > 0) {
+          const memFreeHist = await queryPrometheusRange('sum(node_memory_MemFree_bytes)', '5m', '10s');
+          const memBuffersHist = await queryPrometheusRange('sum(node_memory_Buffers_bytes)', '5m', '10s');
+          const memCachedHist = await queryPrometheusRange('sum(node_memory_Cached_bytes)', '5m', '10s');
+          if (memTotalHist.length > 0 && memFreeHist.length > 0) {
             history.memory = memTotalHist.slice(-MAX_POINTS).map((total, i) => {
-              const avail = memAvailHist[i] || 0;
-              return ((total - avail) / total) * 100;
+              const free = memFreeHist[i] || 0;
+              const buffers = memBuffersHist[i] || 0;
+              const cached = memCachedHist[i] || 0;
+              const used = total - free - buffers - cached;
+              return (used / total) * 100;
             });
             drawSparkline('memory-graph', history.memory, colors.memory, 100);
           }
