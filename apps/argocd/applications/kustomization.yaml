@@ -6,5 +6,6 @@ resources:
   - cloudnative-pg.yaml
   - external-dns.yaml
   - longhorn.yaml
+  - plane.yaml
   - telnet-server.yaml
   - loki.yaml

@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plane
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://helm.plane.so/
+    chart: plane-ce
+    targetRevision: 1.0.22
+    helm:
+      releaseName: plane
+      values: |
+        planeVersion: v0.23.1
+
+        ingress:
+          enabled: true
+          appHost: plane.lab.axiomlayer.com
+          ingressClass: traefik
+
+        ssl:
+          createIssuer: false
+
+        postgres:
+          local_setup: true
+          volumeSize: 10Gi
+          storageClass: longhorn
+
+        redis:
+          local_setup: true
+          volumeSize: 1Gi
+          storageClass: longhorn
+
+        rabbitmq:
+          local_setup: true
+          volumeSize: 1Gi
+          storageClass: longhorn
+
+        minio:
+          local_setup: true
+          volumeSize: 10Gi
+          storageClass: longhorn
+
+        env:
+          docstore_bucket: "uploads"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plane
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
