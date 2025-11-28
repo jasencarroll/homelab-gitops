@@ -21,19 +21,17 @@ spec:
             - name: AUTHENTIK_POSTGRESQL__PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: authentik-helm-secrets
-                  key: postgresql_password
+                  name: authentik-db-app
+                  key: password
         authentik:
+          secret_key: ""  # Set via env var
           postgresql:
-            password: ""  # Set via env var above
-          secret_key: ""  # Set via env var above
+            host: authentik-db-rw.authentik.svc
+            name: authentik
+            user: authentik
+            password: ""  # Set via env var
         postgresql:
-          enabled: true
-          auth:
-            password: ""  # Will use existing secret
-            existingSecret: authentik-helm-secrets
-            secretKeys:
-              adminPasswordKey: postgresql_password
+          enabled: false
         redis:
           enabled: true
         server:
