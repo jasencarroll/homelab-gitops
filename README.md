@@ -23,6 +23,7 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 | Outline | https://docs.lab.axiomlayer.com | Documentation wiki |
 | Plane | https://plane.lab.axiomlayer.com | Project management |
 | Telnet Server | https://telnet.lab.axiomlayer.com | Demo app with SSO |
+| Open WebUI | https://ai.lab.axiomlayer.com | AI chat interface (Ollama backend) |
 
 ---
 
@@ -35,6 +36,12 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 | neko | control-plane | 100.67.134.110 | 192.168.1.167 | 462GB NVMe |
 | neko2 | control-plane | 100.121.67.60 | 192.168.1.103 | 462GB NVMe |
 | bobcat | agent (Raspberry Pi) | 100.106.35.14 | 192.168.1.49 | 500GB SSD |
+
+### GPU Workstation
+
+| Node | Role | GPU | VRAM | Purpose |
+|------|------|-----|------|---------|
+| siberian | Ollama server | NVIDIA RTX 5070 Ti | 16GB | Local LLM inference |
 
 ### Technology Stack
 
@@ -71,6 +78,7 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 | Outline | Documentation wiki | outline |
 | Plane | Project management | plane |
 | Telnet Server | Demo application | telnet-server |
+| Open WebUI | AI chat interface | open-webui |
 
 ---
 
@@ -94,8 +102,10 @@ homelab-gitops/
 │   │       ├── loki.yaml
 │   │       ├── longhorn.yaml
 │   │       ├── nfs-proxy.yaml
+│   │       ├── open-webui.yaml
 │   │       ├── plane.yaml
 │   │       ├── plane-extras.yaml
+│   │       ├── root.yaml                 # App of Apps (auto-syncs all Applications)
 │   │       └── telnet-server.yaml
 │   ├── n8n/                          # Workflow automation
 │   ├── outline/                      # Documentation wiki
@@ -116,9 +126,17 @@ homelab-gitops/
 │   ├── external-dns/                 # Automatic DNS management
 │   ├── longhorn/                     # Distributed storage + UI ingress
 │   ├── loki/                         # Log aggregation
-│   └── nfs-proxy/                    # NFS proxy for Longhorn backups
-│       ├── deployment.yaml           # nfs-server on neko node
-│       └── service.yaml              # ClusterIP for Longhorn
+│   ├── nfs-proxy/                    # NFS proxy for Longhorn backups
+│   │   ├── deployment.yaml           # nfs-server on neko node
+│   │   └── service.yaml              # ClusterIP for Longhorn
+│   └── open-webui/                   # AI chat interface
+│       ├── deployment.yaml           # Open WebUI container
+│       ├── configmap.yaml            # Ollama connection config
+│       └── ingress.yaml              # ai.lab.axiomlayer.com
+├── scripts/                          # Provisioning scripts
+│   ├── provision-siberian.sh         # GPU workstation (5070Ti + Ollama)
+│   ├── provision-k3s-server.sh       # K3s control-plane node
+│   └── provision-k3s-agent.sh        # K3s worker node
 └── clusters/lab/                     # Root kustomization
 ```
 
@@ -140,6 +158,25 @@ Developer → git push → GitHub → ArgoCD detects change → Syncs to cluster
 2. ArgoCD watches the repo and automatically syncs changes
 3. GitHub Actions validate changes using self-hosted runners
 4. No manual `kubectl apply` needed after initial bootstrap
+
+### App of Apps Pattern
+
+ArgoCD uses an "App of Apps" pattern for automatic Application management:
+
+```
+apps/argocd/applications/root.yaml (manages all other Applications)
+         │
+         ├── cert-manager.yaml → infrastructure/cert-manager/
+         ├── authentik.yaml → infrastructure/authentik/
+         ├── open-webui.yaml → infrastructure/open-webui/
+         └── ... (all Application manifests)
+```
+
+**Adding a new application is fully automated:**
+1. Create manifests in `apps/{name}/` or `infrastructure/{name}/`
+2. Create `apps/argocd/applications/{name}.yaml`
+3. Add to `apps/argocd/applications/kustomization.yaml`
+4. Push to GitHub - ArgoCD auto-syncs everything
 
 ### DNS + TLS Flow
 
@@ -472,7 +509,7 @@ resources:
 
 ### 7. Commit and Push
 
-ArgoCD will automatically sync the new application.
+The App of Apps (`root.yaml`) will automatically detect the new Application manifest and deploy it. No manual `kubectl apply` needed.
 
 ---
 
@@ -552,6 +589,42 @@ Solves UniFi NAS single-IP NFS export limitation.
 ```bash
 echo "nfsd" | sudo tee /etc/modules-load.d/nfsd.conf
 sudo modprobe nfsd
+```
+
+### Open WebUI + Ollama
+
+Local LLM inference using a dedicated GPU workstation.
+
+**Architecture**:
+```
+Open WebUI (K8s cluster) ──► Ollama (siberian workstation)
+     │                              │
+     └── ai.lab.axiomlayer.com      └── RTX 5070 Ti (16GB VRAM)
+                                         via Tailscale
+```
+
+**Components**:
+- **Open WebUI**: Chat interface running in K8s (`open-webui` namespace)
+- **Ollama**: LLM inference server on dedicated GPU workstation
+- **Connection**: Via Tailscale mesh (configured in `configmap.yaml`)
+
+**Recommended Models** (16GB VRAM):
+| Model | VRAM | Use Case |
+|-------|------|----------|
+| `llama3.2:3b` | 2GB | Fast, general purpose |
+| `llama3.1:8b` | 5GB | Good balance |
+| `deepseek-r1:14b` | 9GB | Reasoning |
+| `codellama:13b` | 8GB | Code assistance |
+| `qwen2.5:14b` | 9GB | Multilingual |
+
+**Provisioning the GPU workstation**:
+```bash
+# On fresh Ubuntu 24.04 install
+sudo ./scripts/provision-siberian.sh jasen
+# Reboot, then:
+sudo tailscale up
+sudo systemctl start ollama
+ollama pull llama3.2:3b
 ```
 
 ---
@@ -843,6 +916,8 @@ kubectl apply -k apps/argocd/applications
 - [x] Alerting (Alertmanager)
 - [x] CI/CD pipelines (GitHub Actions self-hosted runners)
 - [x] Backup automation (Longhorn → UniFi NAS via NFS proxy)
+- [x] App of Apps pattern (auto-sync ArgoCD Applications)
+- [x] Local LLM inference (Open WebUI + Ollama on GPU workstation)
 
 ---
 
@@ -856,6 +931,8 @@ kubectl apply -k apps/argocd/applications
 - Ubuntu Server 24.04 defaults to 100GB LVM; extend manually for full disk
 - UniFi NAS NFS exports only accept single IP; use NFS proxy for multi-node access
 - Actions Runner Controller CRDs are too large for regular apply; use `--server-side`
+- App of Apps (`root.yaml`) auto-syncs all Application manifests; no manual apply needed
+- Ollama runs on dedicated GPU workstation (siberian) outside the K8s cluster, connected via Tailscale
 
 ---
 

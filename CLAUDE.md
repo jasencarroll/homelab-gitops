@@ -13,13 +13,18 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 homelab-gitops/
 ├── apps/                      # Applications
 │   ├── argocd/               # GitOps UI + Application CRDs
-│   │   └── applications/     # ArgoCD Application manifests
+│   │   └── applications/     # ArgoCD Application manifests (auto-synced via root.yaml)
 │   └── telnet-server/        # Demo app
 ├── infrastructure/           # Core infrastructure
 │   ├── cert-manager/         # TLS (Let's Encrypt + Cloudflare)
 │   ├── authentik/            # SSO/OIDC
 │   ├── longhorn/             # Distributed storage
+│   ├── open-webui/           # AI chat interface (connects to Ollama)
 │   └── cloudnative-pg/       # PostgreSQL (3-node HA)
+├── scripts/                  # Provisioning scripts
+│   ├── provision-siberian.sh # GPU workstation (5070Ti + Ollama)
+│   ├── provision-k3s-server.sh
+│   └── provision-k3s-agent.sh
 └── clusters/lab/             # Root kustomization
 ```
 
@@ -37,6 +42,7 @@ homelab-gitops/
 | Database | CloudNativePG |
 | Logging | Loki + Promtail |
 | Network | Tailscale |
+| AI/LLM | Open WebUI + Ollama (external GPU) |
 
 ## Patterns
 
@@ -92,8 +98,12 @@ spec:
   ingressClassName: traefik
 ```
 
-### ArgoCD Applications
+### ArgoCD Applications (Auto-Synced)
+
+Applications are auto-synced via the App of Apps pattern (`root.yaml`).
+
 ```yaml
+# apps/argocd/applications/{component}.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 spec:
@@ -106,6 +116,8 @@ spec:
       prune: true
       selfHeal: true
 ```
+
+Then add to `apps/argocd/applications/kustomization.yaml` - the App of Apps handles the rest.
 
 ## Secrets
 
@@ -136,7 +148,7 @@ kubectl get certificates -A
 
 ## Adding a New Service
 
-1. Create `apps/{service}/` with:
+1. Create `apps/{service}/` or `infrastructure/{service}/` with:
    - `namespace.yaml` (with labels)
    - `deployment.yaml` (with security context, probes, resources)
    - `service.yaml`
@@ -147,10 +159,15 @@ kubectl get certificates -A
 
 2. Create ArgoCD Application in `apps/argocd/applications/{service}.yaml`
 
-3. Commit - ArgoCD auto-syncs
+3. Add to `apps/argocd/applications/kustomization.yaml`
+
+4. Commit and push - App of Apps auto-syncs everything
 
 ## Notes
 
 - ArgoCD excluded from self-management to prevent loops
 - Helm charts (Authentik, Longhorn) installed manually
 - TLS termination at Traefik; ArgoCD runs HTTP internally (`server.insecure: true`)
+- App of Apps (`root.yaml`) auto-syncs all Application manifests
+- Ollama runs on external GPU workstation (siberian), connected via Tailscale
+- Provisioning scripts in `scripts/` for new nodes and workstations

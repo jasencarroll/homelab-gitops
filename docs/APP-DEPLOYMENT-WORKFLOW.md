@@ -2,6 +2,10 @@
 
 This guide covers the complete workflow for adding new applications to the homelab GitOps cluster.
 
+## Overview
+
+This cluster uses an **App of Apps** pattern for fully automated deployments. Once you create the manifests and push to GitHub, ArgoCD automatically syncs everything - no manual `kubectl apply` needed.
+
 ## Prerequisites
 
 - Access to the K3s cluster (`kubectl` configured)
@@ -252,15 +256,30 @@ kubectl create secret generic {app-name}-secrets -n {app-name} \
   kubeseal --format yaml > apps/{app-name}/sealed-secret.yaml
 ```
 
-### 10. Commit and Deploy
+### 10. Add to Applications Kustomization
+
+Edit `apps/argocd/applications/kustomization.yaml`:
+
+```yaml
+resources:
+  # ... existing apps ...
+  - {app-name}.yaml
+```
+
+### 11. Commit and Deploy
 
 ```bash
-git add apps/{app-name} apps/argocd/applications/{app-name}.yaml
+git add apps/{app-name} apps/argocd/applications/{app-name}.yaml apps/argocd/applications/kustomization.yaml
 git commit -m "Add {app-name} application"
 git push
 ```
 
-ArgoCD will automatically sync and deploy the application.
+The **App of Apps** (`root.yaml`) will automatically:
+1. Detect the new Application manifest in the kustomization
+2. Create the ArgoCD Application
+3. Sync the application manifests to the cluster
+
+No manual `kubectl apply` needed - everything is fully GitOps.
 
 ---
 
@@ -426,6 +445,9 @@ kubectl kustomize apps/{app-name}
 # Check ArgoCD sync status
 kubectl get applications -n argocd
 
+# Check App of Apps status (manages all other apps)
+kubectl get application applications -n argocd
+
 # Force ArgoCD sync
 kubectl patch application {app-name} -n argocd --type merge -p '{"operation":{"sync":{}}}'
 
@@ -438,3 +460,23 @@ kubectl get certificates -A
 # Check all challenges
 kubectl get challenges -A
 ```
+
+## App of Apps Architecture
+
+The cluster uses an "App of Apps" pattern via `apps/argocd/applications/root.yaml`:
+
+```
+root.yaml (Application)
+    │
+    └── watches: apps/argocd/applications/
+            │
+            ├── cert-manager.yaml → syncs infrastructure/cert-manager/
+            ├── authentik.yaml → syncs infrastructure/authentik/
+            ├── open-webui.yaml → syncs infrastructure/open-webui/
+            └── {new-app}.yaml → syncs apps/{new-app}/ or infrastructure/{new-app}/
+```
+
+This means:
+- Adding a new app is fully automated (just add to kustomization.yaml)
+- No manual `kubectl apply` for Application manifests
+- All apps are version-controlled and auditable
