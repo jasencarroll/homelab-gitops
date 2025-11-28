@@ -6,43 +6,102 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 
 - **Domain**: `*.lab.axiomlayer.com`
 - **Cluster**: 3-node K3s over Tailscale mesh
+- **Repository**: https://github.com/jasencdev/axiomlayer
+
+## Nodes
+
+| Node | Role | Purpose |
+|------|------|---------|
+| leopard | control-plane | K3s server |
+| bobcat | worker | K3s agent |
+| lynx | worker | K3s agent |
+| siberian | external | GPU workstation (Ollama) |
 
 ## Structure
 
 ```
 homelab-gitops/
 ├── apps/                      # Applications
-│   ├── argocd/               # GitOps UI + Application CRDs
-│   │   └── applications/     # ArgoCD Application manifests (auto-synced via root.yaml)
+│   ├── argocd/               # GitOps + Application CRDs
+│   │   └── applications/     # ArgoCD Application manifests
+│   ├── campfire/             # Team chat
+│   ├── dashboard/            # Homelab dashboard
+│   ├── n8n/                  # Workflow automation
+│   ├── outline/              # Documentation wiki
+│   ├── plane/                # Project management
 │   └── telnet-server/        # Demo app
 ├── infrastructure/           # Core infrastructure
-│   ├── cert-manager/         # TLS (Let's Encrypt + Cloudflare)
-│   ├── authentik/            # SSO/OIDC
+│   ├── actions-runner/       # GitHub Actions self-hosted runners
+│   ├── alertmanager/         # Alert routing
+│   ├── authentik/            # SSO/OIDC provider
+│   ├── cert-manager/         # TLS certificates
+│   ├── cloudnative-pg/       # PostgreSQL operator
+│   ├── external-dns/         # DNS management
 │   ├── longhorn/             # Distributed storage
-│   ├── open-webui/           # AI chat interface (connects to Ollama)
-│   └── cloudnative-pg/       # PostgreSQL (3-node HA)
+│   ├── nfs-proxy/            # NFS access
+│   └── open-webui/           # AI chat interface
+├── tests/                    # Test suite
+│   ├── smoke-test.sh         # Infrastructure health (29 tests)
+│   ├── test-auth.sh          # Authentication flows (14 tests)
+│   └── validate-manifests.sh # Kustomize validation (17 checks)
 ├── scripts/                  # Provisioning scripts
-│   ├── provision-siberian.sh # GPU workstation (5070Ti + Ollama)
-│   ├── provision-k3s-server.sh
-│   └── provision-k3s-agent.sh
-└── clusters/lab/             # Root kustomization
+└── .github/workflows/        # CI/CD pipeline
+    └── ci.yaml               # Main workflow
 ```
 
 ## Stack
 
-| Component | Technology |
-|-----------|------------|
-| Cluster | K3s |
-| GitOps | ArgoCD |
-| Config | Kustomize |
-| Ingress | Traefik |
-| TLS | cert-manager + Let's Encrypt |
-| Auth | Authentik (OIDC + forward auth) |
-| Storage | Longhorn |
-| Database | CloudNativePG |
-| Logging | Loki + Promtail |
-| Network | Tailscale |
-| AI/LLM | Open WebUI + Ollama (external GPU) |
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Cluster | K3s | Lightweight Kubernetes |
+| GitOps | ArgoCD | Continuous deployment |
+| Config | Kustomize | Manifest management |
+| Ingress | Traefik | Load balancing, TLS termination |
+| TLS | cert-manager + Let's Encrypt | Automatic certificates |
+| Auth | Authentik | OIDC + forward auth SSO |
+| Storage | Longhorn | Distributed block storage |
+| Database | CloudNativePG | PostgreSQL operator |
+| Monitoring | Prometheus + Grafana | Metrics and dashboards |
+| Logging | Loki + Promtail | Log aggregation |
+| Network | Tailscale | Mesh VPN |
+| AI/LLM | Open WebUI + Ollama | Chat interface |
+
+## Applications
+
+| App | URL | Auth Type | Namespace |
+|-----|-----|-----------|-----------|
+| Dashboard | db.lab.axiomlayer.com | Forward Auth | dashboard |
+| Open WebUI | ai.lab.axiomlayer.com | Forward Auth | open-webui |
+| Campfire | chat.lab.axiomlayer.com | Forward Auth | campfire |
+| n8n | autom8.lab.axiomlayer.com | Forward Auth | n8n |
+| Alertmanager | alerts.lab.axiomlayer.com | Forward Auth | monitoring |
+| Longhorn | longhorn.lab.axiomlayer.com | Forward Auth | longhorn-system |
+| ArgoCD | argocd.lab.axiomlayer.com | Native OIDC | argocd |
+| Grafana | grafana.lab.axiomlayer.com | Native OIDC | monitoring |
+| Outline | docs.lab.axiomlayer.com | Native OIDC | outline |
+| Plane | plane.lab.axiomlayer.com | Native OIDC | plane |
+| Authentik | auth.lab.axiomlayer.com | Native | authentik |
+
+## CI/CD Pipeline
+
+### Flow
+1. Push to main → GitHub Actions CI
+2. Jobs: validate-manifests, lint, security scan
+3. ci-passed gate → triggers ArgoCD sync
+4. ArgoCD deploys → changes applied
+5. integration-tests → smoke + auth tests
+
+### GitHub Actions Secrets
+| Secret | Purpose |
+|--------|---------|
+| ARGOCD_AUTH_TOKEN | ArgoCD API access for sync trigger |
+
+### Running Tests Locally
+```bash
+./tests/validate-manifests.sh  # Kustomize validation
+./tests/smoke-test.sh          # Infrastructure health
+./tests/test-auth.sh           # Authentication flows
+```
 
 ## Patterns
 
@@ -54,12 +113,12 @@ homelab-gitops/
 ├── service.yaml
 ├── certificate.yaml
 ├── ingress.yaml
-├── pdb.yaml              # PodDisruptionBudget for HA
+├── networkpolicy.yaml    # Default deny + explicit allows
+├── pdb.yaml              # PodDisruptionBudget (if replicas > 1)
 └── kustomization.yaml
 ```
 
 ### Required Labels
-All resources use standard Kubernetes labels:
 ```yaml
 labels:
   app.kubernetes.io/name: {name}
@@ -69,12 +128,12 @@ labels:
 ```
 
 ### Deployment Security
-All deployments must include:
 ```yaml
 spec:
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
+    fsGroup: 1000
     seccompProfile:
       type: RuntimeDefault
   containers:
@@ -90,7 +149,7 @@ spec:
       limits: {...}
 ```
 
-### Ingress with SSO
+### Ingress with Forward Auth
 ```yaml
 annotations:
   traefik.ingress.kubernetes.io/router.middlewares: authentik-ak-outpost-forward-auth-outpost@kubernetescrd
@@ -98,28 +157,37 @@ spec:
   ingressClassName: traefik
 ```
 
-### ArgoCD Applications (Auto-Synced)
-
-Applications are auto-synced via the App of Apps pattern (`root.yaml`).
-
+### Network Policy Pattern
 ```yaml
-# apps/argocd/applications/{component}.yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
+# Default deny
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {app}-default-deny
 spec:
-  source:
-    repoURL: https://github.com/jasencdev/axiomlayer.git
-    targetRevision: main
-    path: {apps|infrastructure}/{component}
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Allow specific traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {app}-allow-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {app}
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
 ```
 
-Then add to `apps/argocd/applications/kustomization.yaml` - the App of Apps handles the rest.
-
-## Secrets
+## Secrets Management
 
 **Use Sealed Secrets only** - no plaintext secrets in Git.
 
@@ -130,44 +198,105 @@ kubectl create secret generic {name} -n {namespace} \
   kubeseal --format yaml > sealed-secret.yaml
 ```
 
-## Commands
+## API Tokens (stored in .env)
+
+| Variable | Purpose |
+|----------|---------|
+| AUTHENTIK_AUTH_TOKEN | Authentik API access |
+| PLANE_API_KEY | Plane API access |
+| OUTLINE_API_KEY | Outline API access |
+
+## Key Commands
 
 ```bash
 # Validate kustomization
-kubectl kustomize apps/telnet-server
-
-# Apply directly (testing)
-kubectl apply -k infrastructure/cert-manager
+kubectl kustomize apps/{service}
 
 # Check ArgoCD status
 kubectl get applications -n argocd
 
 # Check certificates
 kubectl get certificates -A
+
+# Check pods across namespaces
+kubectl get pods -A
+
+# Drain node for maintenance
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+
+# Uncordon node
+kubectl uncordon <node>
+
+# Restart deployment
+kubectl rollout restart deployment/<name> -n <namespace>
+
+# Check Authentik outpost
+kubectl logs -n authentik -l goauthentik.io/outpost-name=forward-auth-outpost --tail=100
 ```
 
 ## Adding a New Service
 
 1. Create `apps/{service}/` or `infrastructure/{service}/` with:
-   - `namespace.yaml` (with labels)
+   - `namespace.yaml`
    - `deployment.yaml` (with security context, probes, resources)
    - `service.yaml`
    - `certificate.yaml`
-   - `ingress.yaml` (with forward auth)
-   - `pdb.yaml` (if replicas > 1)
+   - `ingress.yaml` (with forward auth annotation)
+   - `networkpolicy.yaml`
    - `kustomization.yaml`
 
-2. Create ArgoCD Application in `apps/argocd/applications/{service}.yaml`
+2. Create ArgoCD Application: `apps/argocd/applications/{service}.yaml`
 
 3. Add to `apps/argocd/applications/kustomization.yaml`
 
-4. Commit and push - App of Apps auto-syncs everything
+4. If using forward auth, create Authentik provider and add to outpost
+
+5. Commit and push - CI validates, then ArgoCD syncs
+
+## Authentik Configuration
+
+### Forward Auth Apps
+Each app needs:
+1. Provider (Proxy Provider, forward auth mode)
+2. Application linked to provider
+3. Provider added to forward-auth-outpost
+
+### Native OIDC Apps
+Each app needs:
+1. Provider (OAuth2/OpenID Provider)
+2. Application linked to provider
+3. Client ID/Secret configured in app
+
+### Outpost Configuration
+The forward-auth-outpost requires PostgreSQL env vars (Authentik 2025.10+):
+- AUTHENTIK_POSTGRESQL__HOST
+- AUTHENTIK_POSTGRESQL__USER
+- AUTHENTIK_POSTGRESQL__PASSWORD
+- AUTHENTIK_POSTGRESQL__NAME
+
+## Documentation
+
+Full documentation in Outline at https://docs.lab.axiomlayer.com:
+- Cluster Overview
+- CI/CD Pipeline
+- Monitoring and Observability
+- Runbooks
+- Security
+- GitHub Actions Runners
+- Dashboard
+- GitOps Workflow
+- Networking and TLS
+- Application Catalog
+- Authentik SSO Configuration
+- Cloudflare DNS and ACME Challenges
+- Storage and Databases
 
 ## Notes
 
+- Root application (`applications`) uses manual sync - triggered by CI after tests pass
+- Child applications use auto-sync with prune and selfHeal
 - ArgoCD excluded from self-management to prevent loops
-- Helm charts (Authentik, Longhorn) installed manually
-- TLS termination at Traefik; ArgoCD runs HTTP internally (`server.insecure: true`)
-- App of Apps (`root.yaml`) auto-syncs all Application manifests
-- Ollama runs on external GPU workstation (siberian), connected via Tailscale
-- Provisioning scripts in `scripts/` for new nodes and workstations
+- Helm charts (Authentik, Longhorn, kube-prometheus-stack) installed via ArgoCD Helm source
+- TLS termination at Traefik; internal services use HTTP
+- Ollama runs on siberian (GPU workstation) via Tailscale
+- GitHub Actions runners have read-only cluster RBAC for tests
