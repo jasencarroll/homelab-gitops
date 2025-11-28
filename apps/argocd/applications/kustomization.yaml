@@ -13,3 +13,4 @@ resources:
   - plane-extras.yaml
   - telnet-server.yaml
   - loki.yaml
+  - nfs-proxy.yaml
