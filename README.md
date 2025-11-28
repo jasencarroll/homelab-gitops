@@ -1,295 +1,213 @@
-# Axiom Layer
+# Homelab GitOps
 
-**Sovereign software company. Democratized.**
+GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 
-A complete platform for developers who want to own their infrastructure end-to-end. Three machines, 30 minutes, zero vendors.
+- **Domain**: `*.lab.axiomlayer.com`
+- **Cluster**: 3-node K3s over Tailscale mesh
 
 ---
 
-## What is this?
-
-Axiom Layer is an open-source PaaS that gives you everything you need to run a software company—dev platform, business operations, identity management—on hardware you own.
-
-No cloud bills. No vendor lock-in. No permission required.
-
 ## Live Services
 
-| Service | URL | Status |
-|---------|-----|--------|
-| Authentik SSO | https://auth.lab.axiomlayer.com | Running |
-| ArgoCD | https://argocd.lab.axiomlayer.com | Running |
-| Grafana | https://grafana.lab.axiomlayer.com | Running |
-| Telnet Metrics | https://telnet.lab.axiomlayer.com/metrics | Running |
+| Service | URL | Description |
+|---------|-----|-------------|
+| ArgoCD | https://argocd.lab.axiomlayer.com | GitOps continuous delivery |
+| Authentik | https://auth.lab.axiomlayer.com | SSO/OIDC identity provider |
+| Grafana | https://grafana.lab.axiomlayer.com | Metrics dashboards |
+| Longhorn | https://longhorn.lab.axiomlayer.com | Distributed storage UI |
+| n8n (autom8) | https://autom8.lab.axiomlayer.com | Workflow automation |
+| Outline | https://docs.lab.axiomlayer.com | Documentation wiki |
+| Plane | https://plane.lab.axiomlayer.com | Project management |
+| Telnet Server | https://telnet.lab.axiomlayer.com | Demo app with SSO |
 
 ## Architecture
 
-### Cluster
-- **K3s**: 3 nodes over Tailscale mesh
-  - `neko` (control-plane)
-  - `neko2` (control-plane)
-  - `bobcat` (agent)
-- **DNS**: `*.lab.axiomlayer.com` → Cloudflare → Tailscale IPs
+### Cluster Nodes
 
-### The Stack
+| Node | Role | Tailscale IP |
+|------|------|--------------|
+| neko | control-plane | 100.67.134.110 |
+| neko2 | control-plane | 100.121.67.60 |
+| bobcat | agent | 100.106.35.14 |
+
+### Technology Stack
 
 #### Infrastructure Layer
-| Component | Purpose |
-|-----------|---------|
-| K3s | Lightweight Kubernetes |
-| Tailscale | Mesh networking, zero firewall config |
-| Traefik | Ingress, automatic HTTPS |
-| cert-manager | Let's Encrypt certificates (Cloudflare DNS-01) |
-| Sealed Secrets | GitOps-safe secret management |
-| Longhorn | Distributed storage |
-| CloudNativePG | PostgreSQL (3-node HA) |
-| Loki + Promtail | Log aggregation |
-| Prometheus + Grafana | Metrics and dashboards |
+
+| Component | Purpose | Namespace |
+|-----------|---------|-----------|
+| K3s | Lightweight Kubernetes | - |
+| Tailscale | Mesh networking | - |
+| Traefik | Ingress controller, TLS termination | kube-system |
+| cert-manager | Let's Encrypt certificates (Cloudflare DNS-01) | cert-manager |
+| Sealed Secrets | GitOps-safe secret management | kube-system |
+| Longhorn | Distributed block storage | longhorn-system |
+| CloudNativePG | PostgreSQL operator | cnpg-system |
+| External-DNS | Automatic Cloudflare DNS records | external-dns |
+| Loki + Promtail | Log aggregation | monitoring |
+| Prometheus + Grafana | Metrics and dashboards | monitoring |
 
 #### Platform Layer
-| Component | Purpose |
-|-----------|---------|
-| Authentik | SSO + RBAC + forward auth |
-| ArgoCD | GitOps continuous delivery |
 
-### Workflow
+| Component | Purpose | Namespace |
+|-----------|---------|-----------|
+| Authentik | SSO + OIDC + forward auth | authentik |
+| ArgoCD | GitOps continuous delivery | argocd |
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Developer                                   │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                │ git push
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  GitHub                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │
-│  │    Code     │> │   Actions   │> │    GHCR     │                  │
-│  └─────────────┘  └─────────────┘  └─────────────┘                  │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                │ image pushed, manifest updated
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  ArgoCD (GitOps)                                                    │
-│  Watches repo → Syncs to cluster                                    │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                │ deploys
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  K3s Cluster                                                        │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Nodes: neko (control) + neko2 (control) + bobcat (worker)  │    │
-│  │  Connected via Tailscale mesh                               │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                │ request
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Traefik Ingress + Authentik Forward Auth                           │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  myapp.lab.axiomlayer.com                                   │    │
-│  │       │                                                     │    │
-│  │       ▼                                                     │    │
-│  │  ┌──────────┐    ┌──────────┐    ┌──────────┐               │    │
-│  │  │ Traefik  │>   │ Authentik│>   │   App    │               │    │
-│  │  │  (TLS)   │    │ (verify) │    │ (headers)│               │    │
-│  │  └──────────┘    └──────────┘    └──────────┘               │    │
-│  │                       │                                     │    │
-│  │              X-Authentik-Username                           │    │
-│  │              X-Authentik-Email                              │    │
-│  │              X-Authentik-Groups                             │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
-```
+#### Application Layer
+
+| Application | Purpose | Namespace |
+|-------------|---------|-----------|
+| n8n | Workflow automation | n8n |
+| Outline | Documentation wiki | outline |
+| Plane | Project management | plane |
+| Telnet Server | Demo application | telnet-server |
+
+---
 
 ## Directory Structure
 
 ```
 homelab-gitops/
-├── apps/                         # Applications
-│   ├── argocd/                  # GitOps UI + Application CRDs
-│   │   └── applications/        # ArgoCD Application manifests
-│   └── telnet-server/           # Demo app with SSO
-├── infrastructure/              # Core infrastructure
-│   ├── cert-manager/            # TLS (Let's Encrypt + Cloudflare)
-│   ├── authentik/               # SSO/OIDC provider
-│   ├── longhorn/                # Distributed storage
-│   └── cloudnative-pg/          # PostgreSQL (3-node HA)
-└── clusters/lab/                # Root kustomization
+├── apps/                              # Applications
+│   ├── argocd/
+│   │   └── applications/             # ArgoCD Application manifests
+│   │       ├── authentik.yaml
+│   │       ├── cert-manager.yaml
+│   │       ├── cloudnative-pg.yaml
+│   │       ├── external-dns.yaml
+│   │       ├── loki.yaml
+│   │       ├── longhorn.yaml
+│   │       ├── n8n.yaml
+│   │       ├── outline.yaml
+│   │       ├── plane.yaml
+│   │       ├── plane-extras.yaml
+│   │       └── telnet-server.yaml
+│   ├── n8n/                          # Workflow automation
+│   ├── outline/                      # Documentation wiki
+│   ├── plane/                        # Project management (extras)
+│   └── telnet-server/                # Demo app
+├── infrastructure/                    # Core infrastructure
+│   ├── cert-manager/                 # TLS certificates
+│   ├── cloudnative-pg/               # PostgreSQL operator
+│   ├── external-dns/                 # Automatic DNS management
+│   ├── longhorn/                     # Distributed storage
+│   └── loki/                         # Log aggregation
+└── clusters/lab/                     # Root kustomization
 ```
 
-## SSO Everywhere
+---
 
-Every application is protected by Authentik forward auth. Your apps receive user context via headers:
+## How It Works
+
+### GitOps Workflow
+
+```
+Developer → git push → GitHub → ArgoCD detects change → Syncs to cluster
+```
+
+1. All configuration lives in this Git repository
+2. ArgoCD watches the repo and automatically syncs changes
+3. No manual `kubectl apply` needed after initial bootstrap
+
+### DNS + TLS Flow
+
+```
+Request to *.lab.axiomlayer.com
+    │
+    ▼
+Cloudflare DNS (A record → Tailscale IPs)
+    │
+    ▼
+Traefik Ingress (TLS termination)
+    │
+    ▼
+Authentik Forward Auth (SSO verification)
+    │
+    ▼
+Application (receives X-Authentik-* headers)
+```
+
+### Automatic DNS Management
+
+External-DNS watches Ingress resources and automatically creates/updates Cloudflare DNS records:
+
+1. Create an Ingress with a host
+2. External-DNS creates the A record in Cloudflare
+3. cert-manager requests a TLS certificate via DNS-01 challenge
+4. Traefik serves the application with HTTPS
+
+### Certificate Issuance
+
+cert-manager uses Cloudflare DNS-01 challenges:
+
+1. cert-manager creates a TXT record via Cloudflare API
+2. Let's Encrypt verifies the record
+3. Certificate is issued and stored as a Kubernetes Secret
+4. Traefik uses the secret for TLS termination
+
+**Important**: cert-manager is configured to use public DNS servers (1.1.1.1, 8.8.8.8) for DNS-01 validation to avoid local DNS resolver issues.
+
+---
+
+## SSO Integration
+
+All applications are protected by Authentik forward auth. Applications receive user context via HTTP headers:
 
 ```
 X-Authentik-Username: jasen
-X-Authentik-Email: jasen@company.com
-X-Authentik-Groups: engineers,admins
+X-Authentik-Email: jasen@axiomlayer.com
+X-Authentik-Groups: admins,engineers
+X-Authentik-Uid: abc123
 ```
 
-**No OAuth libraries. No JWT validation. No session management. No auth code.**
+### Ingress Configuration for SSO
 
-Your app just reads headers. Authentik handles the rest.
-
-## Node Provisioning
-
-### 1. Install Ubuntu 24.04 LTS
-
-### 2. Install Tailscale
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up --ssh
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-ak-outpost-forward-auth-outpost@kubernetescrd
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - myapp.lab.axiomlayer.com
+      secretName: myapp-tls
 ```
 
-### 3. Install Docker
-```bash
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER
-newgrp docker
+---
+
+## Adding a New Application
+
+### 1. Create Application Directory
+
+```
+apps/myapp/
+├── namespace.yaml
+├── deployment.yaml
+├── service.yaml
+├── certificate.yaml
+├── ingress.yaml
+├── pdb.yaml              # If replicas > 1
+└── kustomization.yaml
 ```
 
-### 4. Install K3s
+### 2. Required Labels
 
-**First control-plane node (neko):**
-```bash
-curl -sfL https://get.k3s.io | sh -s - server \
-  --cluster-init \
-  --tls-san=neko \
-  --flannel-iface=tailscale0
-```
-
-**Additional control-plane nodes:**
-```bash
-curl -sfL https://get.k3s.io | sh -s - server \
-  --server https://<first-node-tailscale-ip>:6443 \
-  --token <node-token> \
-  --tls-san=<hostname> \
-  --flannel-iface=tailscale0
-```
-
-**Worker nodes:**
-```bash
-curl -sfL https://get.k3s.io | sh -s - agent \
-  --server https://<control-plane-tailscale-ip>:6443 \
-  --token <node-token> \
-  --flannel-iface=tailscale0
-```
-
-### 5. Fix kubeconfig permissions
-```bash
-sudo chmod 644 /etc/rancher/k3s/k3s.yaml
-```
-
-## Bootstrap
-
-### 1. Install sealed-secrets controller
-```bash
-helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
-helm install sealed-secrets sealed-secrets/sealed-secrets -n kube-system
-```
-
-### 2. Install cert-manager
-```bash
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
-```
-
-### 3. Create Cloudflare sealed secret
-```bash
-kubectl create secret generic cloudflare-api-token \
-  --namespace cert-manager \
-  --dry-run=client \
-  --from-literal=api-token=YOUR_TOKEN \
-  -o yaml | kubeseal --format yaml > infrastructure/cert-manager/sealed-secret.yaml
-```
-
-### 4. Apply infrastructure
-```bash
-kubectl apply -k infrastructure/cert-manager
-```
-
-### 5. Install Longhorn
-```bash
-helm repo add longhorn https://charts.longhorn.io
-helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace
-```
-
-### 6. Install CloudNativePG Operator
-```bash
-kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.0.yaml
-kubectl apply -k infrastructure/cloudnative-pg
-```
-
-### 7. Install Authentik
-```bash
-kubectl create namespace authentik
-helm repo add authentik https://charts.goauthentik.io
-helm install authentik authentik/authentik -n authentik \
-  --set authentik.secret_key=$(openssl rand -hex 32) \
-  --set authentik.postgresql.password=$(openssl rand -base64 16) \
-  --set postgresql.enabled=true \
-  --set redis.enabled=true \
-  -f infrastructure/authentik/values.yaml
-```
-
-### 8. Install ArgoCD
-```bash
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-kubectl apply -k apps/argocd
-```
-
-### 9. Configure Authentik Forward Auth
-
-In Authentik UI:
-1. Create Provider: Proxy Provider, Forward auth (domain level)
-2. Cookie domain: `lab.axiomlayer.com`
-3. External host: `https://auth.lab.axiomlayer.com`
-4. Create Application linking to provider
-5. Create Outpost: Proxy type, select application
-
-## Secrets Management
-
-**Use Sealed Secrets only** - no plaintext secrets in Git.
-
-```bash
-kubectl create secret generic my-secret \
-  --namespace my-namespace \
-  --dry-run=client \
-  --from-literal=key=value \
-  -o yaml | kubeseal \
-  --controller-name=sealed-secrets \
-  --controller-namespace=kube-system \
-  --format yaml > path/to/sealed-secret.yaml
-```
-
-## Adding a New App with SSO
-
-1. Create `apps/{service}/` directory with:
-   - `namespace.yaml` (with standard labels)
-   - `deployment.yaml` (with security context, probes, resources)
-   - `service.yaml`
-   - `certificate.yaml` (referencing `letsencrypt-prod` ClusterIssuer)
-   - `ingress.yaml` (with forward auth annotation)
-   - `pdb.yaml` (PodDisruptionBudget, if replicas > 1)
-   - `kustomization.yaml`
-
-2. Create ArgoCD Application in `apps/argocd/applications/{service}.yaml`
-
-3. Commit and push - ArgoCD auto-syncs
-
-### Required Labels
 ```yaml
 labels:
-  app.kubernetes.io/name: {name}
-  app.kubernetes.io/component: {component}
+  app.kubernetes.io/name: myapp
+  app.kubernetes.io/component: server
   app.kubernetes.io/part-of: homelab
   app.kubernetes.io/managed-by: argocd
 ```
 
-### Deployment Security Context
+### 3. Security Context (Required)
+
 ```yaml
 spec:
   securityContext:
@@ -298,91 +216,327 @@ spec:
     seccompProfile:
       type: RuntimeDefault
   containers:
-  - securityContext:
-      allowPrivilegeEscalation: false
-      readOnlyRootFilesystem: true
-      capabilities:
-        drop: ["ALL"]
-    livenessProbe: {...}
-    readinessProbe: {...}
-    resources:
-      requests: {...}
-      limits: {...}
+    - name: myapp
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
 ```
 
-### Ingress with Forward Auth
+### 4. Certificate
+
 ```yaml
-annotations:
-  traefik.ingress.kubernetes.io/router.middlewares: authentik-ak-outpost-forward-auth-outpost@kubernetescrd
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: myapp-tls
+  namespace: myapp
 spec:
-  ingressClassName: traefik
+  secretName: myapp-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - myapp.lab.axiomlayer.com
 ```
 
-Your app receives user context via headers:
-- `X-Authentik-Username`
-- `X-Authentik-Email`
-- `X-Authentik-Groups`
+### 5. Create ArgoCD Application
+
+Create `apps/argocd/applications/myapp.yaml`:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jasencarroll/homelab-gitops.git
+    targetRevision: main
+    path: apps/myapp
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myapp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+### 6. Add to Kustomization
+
+Edit `apps/argocd/applications/kustomization.yaml`:
+
+```yaml
+resources:
+  - myapp.yaml
+```
+
+### 7. Commit and Push
+
+ArgoCD will automatically sync the new application.
+
+---
+
+## Infrastructure Components
+
+### cert-manager
+
+Handles TLS certificate issuance via Let's Encrypt.
+
+**ClusterIssuer**: `letsencrypt-prod`
+- Uses Cloudflare DNS-01 challenge
+- API token stored in Sealed Secret
+- Configured to use public DNS servers for validation
+
+**Files**:
+- `infrastructure/cert-manager/cluster-issuer.yaml`
+- `infrastructure/cert-manager/sealed-secret.yaml`
+
+### External-DNS
+
+Automatically manages Cloudflare DNS records based on Ingress resources.
+
+**Configuration**:
+- Watches: Ingress resources
+- Domain filter: `lab.axiomlayer.com`
+- Policy: `upsert-only` (won't delete records)
+- TXT registry for ownership tracking
+
+**Files**:
+- `infrastructure/external-dns/deployment.yaml`
+- `infrastructure/external-dns/rbac.yaml`
+- `infrastructure/external-dns/sealed-secret.yaml`
+
+### Longhorn
+
+Distributed block storage across all nodes.
+
+**Features**:
+- 3-way replication
+- Backup to external storage (configurable)
+- Volume snapshots
+- UI at https://longhorn.lab.axiomlayer.com
+
+**Storage Class**: `longhorn` (default)
+
+### CloudNativePG
+
+PostgreSQL operator for running HA PostgreSQL clusters.
+
+**Namespace**: `cnpg-system`
+
+Used by:
+- Authentik
+- Outline
+- Plane (uses local PostgreSQL in Helm chart)
+
+### Loki + Promtail
+
+Centralized log aggregation.
+
+- **Loki**: Log storage and querying
+- **Promtail**: Log collection from all pods
+- **Grafana**: Query interface via Explore
+
+---
+
+## Secrets Management
+
+All secrets are managed via Sealed Secrets. **Never commit plaintext secrets.**
+
+### Create a Sealed Secret
+
+```bash
+# Create the secret manifest
+kubectl create secret generic my-secret \
+  --namespace my-namespace \
+  --dry-run=client \
+  --from-literal=api-token=YOUR_TOKEN \
+  -o yaml | kubeseal \
+  --controller-name=sealed-secrets \
+  --controller-namespace=kube-system \
+  --format yaml > sealed-secret.yaml
+```
+
+### Sealed Secrets in Use
+
+| Secret | Namespace | Purpose |
+|--------|-----------|---------|
+| cloudflare-api-token | cert-manager | DNS-01 challenge |
+| cloudflare-api-token | external-dns | DNS record management |
+
+---
 
 ## Common Commands
 
 ```bash
-# Validate kustomization
-kubectl kustomize apps/telnet-server
-
-# Apply directly (testing)
-kubectl apply -k infrastructure/cert-manager
-
-# Check ArgoCD status
+# Check ArgoCD application status
 kubectl get applications -n argocd
+
+# Force sync an application
+kubectl patch application myapp -n argocd --type=merge \
+  -p '{"operation":{"sync":{}}}'
 
 # Check certificates
 kubectl get certificates -A
 
-# View logs (via Loki)
-kubectl logs -n monitoring -l app=loki
+# Check certificate requests
+kubectl get certificaterequests -A
+
+# View cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager
+
+# Check external-dns logs
+kubectl logs -n external-dns deployment/external-dns
+
+# Validate kustomization
+kubectl kustomize apps/myapp
+
+# Restart a deployment
+kubectl rollout restart deployment/myapp -n myapp
 ```
 
-## Why Self-Host?
+---
 
-### The Problem
+## Troubleshooting
 
-Running a software company requires dozens of SaaS subscriptions:
+### Certificate Stuck in Pending
 
-| Service | Annual Cost |
-|---------|-------------|
-| Okta / Auth0 | $50,000+ |
-| GitHub Enterprise | $20,000+ |
-| Jira / Linear | $30,000+ |
-| Slack | $20,000+ |
-| Salesforce | $50,000+ |
-| Datadog | $50,000+ |
-| AWS / Azure | $200,000+ |
-| **Total** | **$400,000+/year** |
+1. Check the CertificateRequest:
+   ```bash
+   kubectl describe certificaterequest -n <namespace>
+   ```
 
-Plus: vendor lock-in, data sovereignty concerns, compliance complexity, and zero ownership.
+2. Check the Challenge:
+   ```bash
+   kubectl describe challenge -n <namespace>
+   ```
 
-### The Solution
+3. Verify DNS propagation:
+   ```bash
+   dig @1.1.1.1 _acme-challenge.myapp.lab.axiomlayer.com TXT
+   ```
 
-| Axiom Layer | Cost |
-|-------------|------|
-| 3x Mini PCs | $1,200 (one-time) |
-| Electricity | ~$100/year |
-| Domain | $12/year |
-| **Total** | **$1,312 first year, $112 ongoing** |
+4. Check cert-manager logs:
+   ```bash
+   kubectl logs -n cert-manager deployment/cert-manager | grep myapp
+   ```
 
-Same capabilities. Same SSO. Same audit trails. You own it.
+### ArgoCD OutOfSync
 
-## Hardware Requirements
+1. Check what's different:
+   ```bash
+   kubectl get application myapp -n argocd -o yaml | grep -A20 "status:"
+   ```
 
-| Qty | Component | Specs | Est. Cost |
-|-----|-----------|-------|-----------|
-| 3 | Intel NUC / Mini PC | N100+, 16GB RAM, 512GB NVMe | $300-400 each |
-| 1 | Network switch | Gigabit, 5+ ports | $30 |
-| 1 | UPS (optional) | 600VA+ | $80 |
+2. For immutable resources (Jobs), delete and let ArgoCD recreate:
+   ```bash
+   kubectl delete job <job-name> -n <namespace>
+   ```
 
-**Total: ~$1,000-1,400**
+### External-DNS Not Creating Records
 
-Any x86_64 or ARM64 machines with 8GB+ RAM work.
+1. Check logs:
+   ```bash
+   kubectl logs -n external-dns deployment/external-dns
+   ```
+
+2. Verify Ingress has correct annotations and host
+
+3. Check Cloudflare API token permissions (Zone:Read, DNS:Edit)
+
+---
+
+## Bootstrap (Fresh Cluster)
+
+### Prerequisites
+
+- 3 machines with Ubuntu 24.04 LTS
+- Tailscale installed and connected
+- Docker installed
+
+### 1. Install K3s
+
+**First control-plane (neko):**
+```bash
+curl -sfL https://get.k3s.io | sh -s - server \
+  --cluster-init \
+  --tls-san=neko \
+  --flannel-iface=tailscale0
+```
+
+**Additional control-plane (neko2):**
+```bash
+curl -sfL https://get.k3s.io | sh -s - server \
+  --server https://<neko-tailscale-ip>:6443 \
+  --token <node-token> \
+  --tls-san=neko2 \
+  --flannel-iface=tailscale0
+```
+
+**Worker node (bobcat):**
+```bash
+curl -sfL https://get.k3s.io | sh -s - agent \
+  --server https://<neko-tailscale-ip>:6443 \
+  --token <node-token> \
+  --flannel-iface=tailscale0
+```
+
+### 2. Install Core Components
+
+```bash
+# Sealed Secrets
+helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+helm install sealed-secrets sealed-secrets/sealed-secrets -n kube-system
+
+# cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
+
+# Longhorn
+helm repo add longhorn https://charts.longhorn.io
+helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace
+
+# CloudNativePG
+kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.0.yaml
+
+# Authentik (via Helm)
+helm repo add authentik https://charts.goauthentik.io
+helm install authentik authentik/authentik -n authentik --create-namespace -f values.yaml
+
+# ArgoCD
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+### 3. Configure ArgoCD
+
+```bash
+# Apply ArgoCD applications
+kubectl apply -k apps/argocd/applications
+```
+
+---
 
 ## Roadmap
 
@@ -391,42 +545,32 @@ Any x86_64 or ARM64 machines with 8GB+ RAM work.
 - [x] GitOps with ArgoCD
 - [x] SSO with Authentik
 - [x] Automatic TLS (cert-manager + Cloudflare DNS-01)
+- [x] Automatic DNS (external-dns + Cloudflare)
 - [x] Sealed secrets
-- [x] Forward auth middleware (domain-level)
-- [x] Container registry (GHCR integration)
-- [x] First workload deployed with SSO (telnet-server)
+- [x] Forward auth middleware
 - [x] Distributed storage (Longhorn)
 - [x] PostgreSQL HA (CloudNativePG)
 - [x] Logging (Loki + Promtail)
-- [x] Prometheus + Grafana (observability dashboards)
-- [x] GitHub Actions CI pipeline
-- [ ] Business ops suite (Plane, Outline, etc.)
-- [ ] CLI installer
-- [ ] Documentation site
+- [x] Monitoring (Prometheus + Grafana)
+- [x] Workflow automation (n8n)
+- [x] Documentation wiki (Outline)
+- [x] Project management (Plane)
+- [ ] CI/CD pipelines (Tekton or GitHub Actions runners)
+- [ ] Backup automation (Longhorn → NAS)
+- [ ] Alerting (Alertmanager)
+
+---
 
 ## Notes
 
-- ArgoCD excluded from self-management to prevent loops
-- Helm charts (Authentik, Longhorn) installed manually, managed via ArgoCD Applications
-- TLS termination at Traefik; ArgoCD runs HTTP internally (`server.insecure: true`)
-- Multi-arch images (amd64/arm64) required for mixed architecture clusters
+- ArgoCD is excluded from self-management to prevent sync loops
+- Helm charts are installed manually but managed via ArgoCD Applications
+- TLS termination happens at Traefik; backend services run HTTP
+- cert-manager uses `--dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53` to avoid local DNS issues
+- Cloudflare DNS caches negative responses; wait ~7 minutes if a record was previously missing
 
-## Philosophy
-
-> You don't need permission to ship software.
->
-> You don't need a credit card on file with AWS.
->
-> You don't need to pay per seat, per build, per GB.
->
-> Buy hardware once. Own it forever.
->
-> **Platform company in a box.**
+---
 
 ## License
 
 MIT
-
----
-
-**Axiom Layer** — Sovereign software company. Democratized.
