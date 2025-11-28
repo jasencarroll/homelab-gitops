@@ -49,13 +49,14 @@ jobs:
           if ! command -v kube-linter &> /dev/null; then
             ARCH=$(uname -m)
             case $ARCH in
-              x86_64) BINARY="kube-linter-linux" ;;
-              aarch64) BINARY="kube-linter-linux-arm64" ;;
-              armv7l) BINARY="kube-linter-linux-arm" ;;
+              x86_64) TARBALL="kube-linter-linux.tar.gz" ;;
+              aarch64) TARBALL="kube-linter-linux_arm64.tar.gz" ;;
               *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
             esac
-            curl -sSL "https://github.com/stackrox/kube-linter/releases/download/v0.6.8/${BINARY}.tar.gz" | tar xz
-            sudo mv kube-linter /usr/local/bin/
+            curl -sSL -o /tmp/kube-linter.tar.gz "https://github.com/stackrox/kube-linter/releases/download/v0.7.6/${TARBALL}"
+            tar -xzf /tmp/kube-linter.tar.gz -C /tmp
+            sudo mv /tmp/kube-linter /usr/local/bin/
+            rm /tmp/kube-linter.tar.gz
           fi
           kube-linter version
 
