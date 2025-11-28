@@ -60,6 +60,8 @@ spec:
               mountPath: /app/backend/data
             - name: tmp
               mountPath: /tmp
+            - name: static
+              mountPath: /app/backend/open_webui/static
           livenessProbe:
             httpGet:
               path: /health
@@ -79,4 +81,6 @@ spec:
           persistentVolumeClaim:
             claimName: open-webui-data
         - name: tmp
+          emptyDir: {}
+        - name: static
           emptyDir: {}
