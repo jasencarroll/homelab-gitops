@@ -5,6 +5,7 @@ resources:
   - certificate.yaml
   - sealed-secret.yaml
   - postgres-cluster.yaml
+  - blueprints-configmap.yaml
 labels:
   - pairs:
       app.kubernetes.io/managed-by: argocd

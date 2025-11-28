@@ -44,6 +44,21 @@ spec:
               - hosts:
                   - auth.lab.axiomlayer.com
                 secretName: authentik-tls
+          volumes:
+            - name: blueprints
+              configMap:
+                name: authentik-blueprints
+          volumeMounts:
+            - name: blueprints
+              mountPath: /blueprints/custom
+        worker:
+          volumes:
+            - name: blueprints
+              configMap:
+                name: authentik-blueprints
+          volumeMounts:
+            - name: blueprints
+              mountPath: /blueprints/custom
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik
