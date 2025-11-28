@@ -10,5 +10,3 @@ resources:
   - plane-extras.yaml
   - telnet-server.yaml
   - loki.yaml
-  - velero-infra.yaml
-  - velero.yaml
