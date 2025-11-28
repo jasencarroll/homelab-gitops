@@ -38,8 +38,9 @@
       "automerge": true
     }
   ],
-  "regexManagers": [
+  "customManagers": [
     {
+      "customType": "regex",
       "description": "Update container image digests in Kubernetes manifests",
       "fileMatch": ["\\.yaml$"],
       "matchStrings": [
