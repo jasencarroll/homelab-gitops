@@ -4,6 +4,7 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 
 - **Domain**: `*.lab.axiomlayer.com`
 - **Cluster**: 3-node K3s over Tailscale mesh
+- **CI/CD**: Self-hosted GitHub Actions runners (`jasencdev` org)
 
 ---
 
@@ -21,15 +22,17 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 | Plane | https://plane.lab.axiomlayer.com | Project management |
 | Telnet Server | https://telnet.lab.axiomlayer.com | Demo app with SSO |
 
+---
+
 ## Architecture
 
 ### Cluster Nodes
 
-| Node | Role | Tailscale IP |
-|------|------|--------------|
-| neko | control-plane | 100.67.134.110 |
-| neko2 | control-plane | 100.121.67.60 |
-| bobcat | agent | 100.106.35.14 |
+| Node | Role | Tailscale IP | Local IP | Storage |
+|------|------|--------------|----------|---------|
+| neko | control-plane | 100.67.134.110 | 192.168.1.167 | 462GB NVMe |
+| neko2 | control-plane | 100.121.67.60 | 192.168.1.103 | 462GB NVMe |
+| bobcat | agent (Raspberry Pi) | 100.106.35.14 | 192.168.1.49 | 500GB SSD |
 
 ### Technology Stack
 
@@ -42,11 +45,13 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 | Traefik | Ingress controller, TLS termination | kube-system |
 | cert-manager | Let's Encrypt certificates (Cloudflare DNS-01) | cert-manager |
 | Sealed Secrets | GitOps-safe secret management | kube-system |
-| Longhorn | Distributed block storage | longhorn-system |
+| Longhorn | Distributed block storage (3-way replication) | longhorn-system |
 | CloudNativePG | PostgreSQL operator | cnpg-system |
 | External-DNS | Automatic Cloudflare DNS records | external-dns |
 | Loki + Promtail | Log aggregation | monitoring |
 | Prometheus + Grafana | Metrics and dashboards | monitoring |
+| Alertmanager | Alert routing and notifications | alertmanager |
+| NFS Proxy | Backup proxy for UniFi NAS | nfs-proxy |
 
 #### Platform Layer
 
@@ -54,6 +59,7 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 |-----------|---------|-----------|
 | Authentik | SSO + OIDC + forward auth | authentik |
 | ArgoCD | GitOps continuous delivery | argocd |
+| Actions Runner Controller | Self-hosted GitHub Actions runners | actions-runner |
 
 #### Application Layer
 
@@ -70,17 +76,22 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 
 ```
 homelab-gitops/
-├── apps/                              # Applications
+├── .github/
+│   └── workflows/
+│       └── test-runner.yaml          # CI workflow using self-hosted runner
+├── apps/
 │   ├── argocd/
 │   │   └── applications/             # ArgoCD Application manifests
+│   │       ├── actions-runner-controller.yaml
+│   │       ├── actions-runner-infra.yaml
+│   │       ├── alertmanager.yaml
 │   │       ├── authentik.yaml
 │   │       ├── cert-manager.yaml
 │   │       ├── cloudnative-pg.yaml
 │   │       ├── external-dns.yaml
 │   │       ├── loki.yaml
 │   │       ├── longhorn.yaml
-│   │       ├── n8n.yaml
-│   │       ├── outline.yaml
+│   │       ├── nfs-proxy.yaml
 │   │       ├── plane.yaml
 │   │       ├── plane-extras.yaml
 │   │       └── telnet-server.yaml
@@ -88,12 +99,24 @@ homelab-gitops/
 │   ├── outline/                      # Documentation wiki
 │   ├── plane/                        # Project management (extras)
 │   └── telnet-server/                # Demo app
-├── infrastructure/                    # Core infrastructure
+├── infrastructure/
+│   ├── actions-runner/               # GitHub Actions self-hosted runners
+│   │   ├── namespace.yaml
+│   │   ├── runner-deployment.yaml    # RunnerDeployment for jasencdev org
+│   │   └── sealed-secret.yaml        # GitHub PAT
+│   ├── alertmanager/                 # Alert management
+│   │   ├── configmap.yaml            # Alert routing config
+│   │   ├── deployment.yaml
+│   │   ├── prometheus-rules.yaml     # Alert rules
+│   │   └── ingress.yaml
 │   ├── cert-manager/                 # TLS certificates
 │   ├── cloudnative-pg/               # PostgreSQL operator
 │   ├── external-dns/                 # Automatic DNS management
-│   ├── longhorn/                     # Distributed storage
-│   └── loki/                         # Log aggregation
+│   ├── longhorn/                     # Distributed storage + UI ingress
+│   ├── loki/                         # Log aggregation
+│   └── nfs-proxy/                    # NFS proxy for Longhorn backups
+│       ├── deployment.yaml           # nfs-server on neko node
+│       └── service.yaml              # ClusterIP for Longhorn
 └── clusters/lab/                     # Root kustomization
 ```
 
@@ -105,11 +128,16 @@ homelab-gitops/
 
 ```
 Developer → git push → GitHub → ArgoCD detects change → Syncs to cluster
+                            ↓
+                   GitHub Actions (self-hosted runner)
+                            ↓
+                   Validates manifests, runs tests
 ```
 
 1. All configuration lives in this Git repository
 2. ArgoCD watches the repo and automatically syncs changes
-3. No manual `kubectl apply` needed after initial bootstrap
+3. GitHub Actions validate changes using self-hosted runners
+4. No manual `kubectl apply` needed after initial bootstrap
 
 ### DNS + TLS Flow
 
@@ -149,6 +177,75 @@ cert-manager uses Cloudflare DNS-01 challenges:
 
 **Important**: cert-manager is configured to use public DNS servers (1.1.1.1, 8.8.8.8) for DNS-01 validation to avoid local DNS resolver issues.
 
+### Backup Architecture
+
+```
+Longhorn Volume
+    │
+    ▼
+NFS Proxy (on neko) ─────► UniFi NAS (192.168.1.234)
+    │                           │
+    │                           └── /k8s-backup/
+    │
+    └── ClusterIP Service (10.43.x.x)
+            │
+            ▼
+    All nodes can access via service
+```
+
+The NFS proxy solves the UniFi NAS single-IP NFS export limitation by:
+1. Running on neko (192.168.1.167) which is allowed by NFS export
+2. Re-exporting via Kubernetes Service so all nodes can access
+3. Longhorn connects to the proxy service IP
+
+**Backup Schedule**: Daily at 2:00 AM, retains 7 backups
+
+---
+
+## CI/CD with Self-Hosted Runners
+
+### Overview
+
+GitHub Actions runners are deployed in the cluster using [actions-runner-controller](https://github.com/actions/actions-runner-controller).
+
+**Organization**: `jasencdev`
+**Labels**: `self-hosted`, `homelab`
+**Replicas**: 1 (auto-scales based on jobs)
+
+### Using the Runner
+
+In any repo under the `jasencdev` organization:
+
+```yaml
+name: Build
+on: [push]
+jobs:
+  build:
+    runs-on: [self-hosted, homelab]
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Running on homelab cluster!"
+```
+
+### Runner Features
+
+- Docker-in-Docker enabled for container builds
+- Access to cluster via kubectl (for deployment workflows)
+- 2 CPU cores, 2GB memory per runner
+
+### Checking Runner Status
+
+```bash
+# Check runner pods
+kubectl get pods -n actions-runner
+
+# Check runner registration
+kubectl get runners -n actions-runner
+
+# View runner logs
+kubectl logs -n actions-runner -l app.kubernetes.io/name=actions-runner
+```
+
 ---
 
 ## SSO Integration
@@ -178,6 +275,84 @@ spec:
     - hosts:
         - myapp.lab.axiomlayer.com
       secretName: myapp-tls
+```
+
+---
+
+## Alerting
+
+### Alertmanager Configuration
+
+Alertmanager receives alerts from Prometheus and routes them based on severity.
+
+**URL**: https://alerts.lab.axiomlayer.com
+
+### Alert Rules
+
+| Alert | Severity | Description |
+|-------|----------|-------------|
+| NodeNotReady | critical | Node has been unready for 5+ minutes |
+| NodeHighCPU | warning | Node CPU > 80% for 10+ minutes |
+| NodeHighMemory | warning | Node memory > 85% for 10+ minutes |
+| NodeDiskPressure | critical | Node disk > 90% |
+| PodCrashLooping | warning | Pod restarting frequently |
+| PodNotReady | warning | Pod not ready for 5+ minutes |
+| CertificateExpiringSoon | warning | Certificate expires in < 30 days |
+| CertificateExpired | critical | Certificate has expired |
+| LonghornVolumeHealthCritical | critical | Longhorn volume faulted |
+| LonghornVolumeDegraded | warning | Longhorn volume degraded |
+| LonghornNodeDown | critical | Longhorn node offline |
+
+### Customizing Alerts
+
+Edit `infrastructure/alertmanager/prometheus-rules.yaml` to add or modify alert rules.
+
+---
+
+## Longhorn Storage
+
+### Overview
+
+Longhorn provides distributed block storage with automatic replication across nodes.
+
+**UI**: https://longhorn.lab.axiomlayer.com
+**Storage Class**: `longhorn` (default)
+**Replication**: 3 replicas (or 2 for large volumes)
+
+### Backup Configuration
+
+- **Target**: UniFi NAS via NFS proxy
+- **Schedule**: Daily at 2:00 AM
+- **Retention**: 7 backups
+
+### Managing Backups
+
+```bash
+# List backup targets
+kubectl get backuptargets -n longhorn-system
+
+# List recurring jobs
+kubectl get recurringjobs -n longhorn-system
+
+# Create manual backup (via UI or kubectl)
+kubectl -n longhorn-system create -f - <<EOF
+apiVersion: longhorn.io/v1beta2
+kind: Backup
+metadata:
+  name: manual-backup-$(date +%Y%m%d)
+spec:
+  snapshotName: ""
+EOF
+```
+
+### Checking Volume Health
+
+```bash
+# List all volumes
+kubectl get volumes -n longhorn-system
+
+# Check for degraded volumes
+kubectl get volumes -n longhorn-system -o custom-columns=NAME:.metadata.name,STATE:.status.state,ROBUSTNESS:.status.robustness | grep -v healthy
 ```
 
 ---
@@ -334,8 +509,9 @@ Automatically manages Cloudflare DNS records based on Ingress resources.
 Distributed block storage across all nodes.
 
 **Features**:
-- 3-way replication
-- Backup to external storage (configurable)
+- 3-way replication (2 for large volumes)
+- Backup to UniFi NAS via NFS proxy
+- Daily automated backups (7 retained)
 - Volume snapshots
 - UI at https://longhorn.lab.axiomlayer.com
 
@@ -360,6 +536,22 @@ Centralized log aggregation.
 - **Promtail**: Log collection from all pods
 - **Grafana**: Query interface via Explore
 
+### NFS Proxy
+
+Solves UniFi NAS single-IP NFS export limitation.
+
+**How it works**:
+1. Runs `erichough/nfs-server` container on neko node
+2. Mounts UniFi NAS share (neko's IP is allowed)
+3. Re-exports via Kubernetes ClusterIP service
+4. All nodes access backups via the service IP
+
+**Requirement**: `nfsd` kernel module must be loaded on neko:
+```bash
+echo "nfsd" | sudo tee /etc/modules-load.d/nfsd.conf
+sudo modprobe nfsd
+```
+
 ---
 
 ## Secrets Management
@@ -370,7 +562,7 @@ All secrets are managed via Sealed Secrets. **Never commit plaintext secrets.**
 
 ```bash
 # Create the secret manifest
-kubectl create secret generic my-secret \
+KUBECONFIG=~/.kube/config kubectl create secret generic my-secret \
   --namespace my-namespace \
   --dry-run=client \
   --from-literal=api-token=YOUR_TOKEN \
@@ -386,6 +578,7 @@ kubectl create secret generic my-secret \
 |--------|-----------|---------|
 | cloudflare-api-token | cert-manager | DNS-01 challenge |
 | cloudflare-api-token | external-dns | DNS record management |
+| github-runner-token | actions-runner | GitHub Actions runner registration |
 
 ---
 
@@ -416,6 +609,15 @@ kubectl kustomize apps/myapp
 
 # Restart a deployment
 kubectl rollout restart deployment/myapp -n myapp
+
+# Check Longhorn volumes
+kubectl get volumes -n longhorn-system
+
+# Check backup target status
+kubectl get backuptargets -n longhorn-system
+
+# Check GitHub Actions runners
+kubectl get runners -n actions-runner
 ```
 
 ---
@@ -444,6 +646,8 @@ kubectl rollout restart deployment/myapp -n myapp
    kubectl logs -n cert-manager deployment/cert-manager | grep myapp
    ```
 
+5. **Note**: Cloudflare caches negative DNS responses for ~7 minutes. If a record was missing, wait before retrying.
+
 ### ArgoCD OutOfSync
 
 1. Check what's different:
@@ -467,6 +671,62 @@ kubectl rollout restart deployment/myapp -n myapp
 
 3. Check Cloudflare API token permissions (Zone:Read, DNS:Edit)
 
+### Longhorn Volume Degraded
+
+1. Check volume status:
+   ```bash
+   kubectl describe volume <pvc-name> -n longhorn-system
+   ```
+
+2. Check node storage:
+   ```bash
+   kubectl get nodes.longhorn.io -n longhorn-system
+   ```
+
+3. If insufficient storage, extend LVM:
+   ```bash
+   sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+   sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
+   ```
+
+4. Restart Longhorn managers to detect new space:
+   ```bash
+   kubectl delete pod -n longhorn-system -l app=longhorn-manager
+   ```
+
+### GitHub Actions Runner Not Picking Up Jobs
+
+1. Check runner status:
+   ```bash
+   kubectl get runners -n actions-runner
+   ```
+
+2. Check controller logs:
+   ```bash
+   kubectl logs -n actions-runner -l app.kubernetes.io/name=actions-runner-controller
+   ```
+
+3. Verify PAT has correct scopes (`admin:org`, `repo`)
+
+4. Delete and recreate runner:
+   ```bash
+   kubectl delete runners -n actions-runner --all
+   ```
+
+### NFS Proxy Not Working
+
+1. Check nfsd module is loaded:
+   ```bash
+   lsmod | grep nfsd
+   ```
+
+2. Check proxy pod logs:
+   ```bash
+   kubectl logs -n nfs-proxy deployment/nfs-proxy
+   ```
+
+3. Verify UniFi NAS NFS export allows neko's IP (192.168.1.167)
+
 ---
 
 ## Bootstrap (Fresh Cluster)
@@ -476,6 +736,14 @@ kubectl rollout restart deployment/myapp -n myapp
 - 3 machines with Ubuntu 24.04 LTS
 - Tailscale installed and connected
 - Docker installed
+- LVM extended to use full disk (Ubuntu default only uses 100GB)
+
+### 0. Extend LVM (if needed)
+
+```bash
+sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
+```
 
 ### 1. Install K3s
 
@@ -528,9 +796,23 @@ helm install authentik authentik/authentik -n authentik --create-namespace -f va
 # ArgoCD
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Actions Runner Controller (CRDs need server-side apply due to size)
+helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
+for crd in runnerdeployments runnerreplicasets runners runnersets; do
+  curl -sL "https://raw.githubusercontent.com/actions/actions-runner-controller/master/charts/actions-runner-controller/crds/actions.summerwind.dev_${crd}.yaml" | kubectl apply --server-side -f -
+done
 ```
 
-### 3. Configure ArgoCD
+### 3. Load nfsd Module (for NFS proxy)
+
+```bash
+# On neko only
+echo "nfsd" | sudo tee /etc/modules-load.d/nfsd.conf
+sudo modprobe nfsd
+```
+
+### 4. Configure ArgoCD
 
 ```bash
 # Apply ArgoCD applications
@@ -557,8 +839,8 @@ kubectl apply -k apps/argocd/applications
 - [x] Documentation wiki (Outline)
 - [x] Project management (Plane)
 - [x] Alerting (Alertmanager)
-- [ ] CI/CD pipelines (GitHub Actions self-hosted runners) - in progress
-- [ ] Backup automation (Longhorn → NAS) - needs NFS share setup
+- [x] CI/CD pipelines (GitHub Actions self-hosted runners)
+- [x] Backup automation (Longhorn → UniFi NAS via NFS proxy)
 
 ---
 
@@ -569,6 +851,9 @@ kubectl apply -k apps/argocd/applications
 - TLS termination happens at Traefik; backend services run HTTP
 - cert-manager uses `--dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53` to avoid local DNS issues
 - Cloudflare DNS caches negative responses; wait ~7 minutes if a record was previously missing
+- Ubuntu Server 24.04 defaults to 100GB LVM; extend manually for full disk
+- UniFi NAS NFS exports only accept single IP; use NFS proxy for multi-node access
+- Actions Runner Controller CRDs are too large for regular apply; use `--server-side`
 
 ---
 
