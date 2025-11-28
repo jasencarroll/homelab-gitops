@@ -168,13 +168,21 @@ else
   curl -fsSL https://ollama.com/install.sh | sh
 fi
 
-# Configure Ollama for network access (Tailscale only via UFW)
+# Configure Ollama for network access and performance
 mkdir -p /etc/systemd/system/ollama.service.d
 
 cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
 [Service]
+# Listen on all interfaces (UFW restricts to Tailscale only)
 Environment="OLLAMA_HOST=0.0.0.0:11434"
+# Allow connections from any origin (Open WebUI)
 Environment="OLLAMA_ORIGINS=*"
+# Set default context window to 32k tokens
+Environment="OLLAMA_NUM_CTX=32768"
+# Keep models loaded longer (5 minutes)
+Environment="OLLAMA_KEEP_ALIVE=5m"
+# Flash attention for better memory efficiency
+Environment="OLLAMA_FLASH_ATTENTION=1"
 EOF
 
 systemctl daemon-reload
