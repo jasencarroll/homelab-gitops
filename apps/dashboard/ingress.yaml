@@ -14,10 +14,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - lab.axiomlayer.com
+        - db.lab.axiomlayer.com
       secretName: dashboard-tls
   rules:
-    - host: lab.axiomlayer.com
+    - host: db.lab.axiomlayer.com
       http:
         paths:
           - path: /
