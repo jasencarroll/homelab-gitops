@@ -1,0 +1,294 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-config
+  namespace: dashboard
+  labels:
+    app.kubernetes.io/name: dashboard
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Homelab | axiomlayer.com</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+          --bg: #0f0f0f;
+          --card-bg: #1a1a1a;
+          --card-hover: #252525;
+          --text: #e0e0e0;
+          --text-muted: #888;
+          --accent: #3b82f6;
+          --border: #333;
+        }
+
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: var(--bg);
+          color: var(--text);
+          min-height: 100vh;
+          padding: 2rem;
+        }
+
+        .container {
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+
+        header {
+          text-align: center;
+          margin-bottom: 3rem;
+        }
+
+        h1 {
+          font-size: 2.5rem;
+          font-weight: 300;
+          letter-spacing: -0.02em;
+          margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+          color: var(--text-muted);
+          font-size: 1rem;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 1rem;
+        }
+
+        .section-title {
+          grid-column: 1 / -1;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--text-muted);
+          margin-top: 1.5rem;
+          margin-bottom: 0.5rem;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .section-title:first-of-type {
+          margin-top: 0;
+        }
+
+        .card {
+          background: var(--card-bg);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 1.25rem;
+          text-decoration: none;
+          color: var(--text);
+          transition: all 0.2s ease;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .card:hover {
+          background: var(--card-hover);
+          border-color: var(--accent);
+          transform: translateY(-2px);
+        }
+
+        .card-header {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .card-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1rem;
+        }
+
+        .card-title {
+          font-size: 1rem;
+          font-weight: 500;
+        }
+
+        .card-desc {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          line-height: 1.4;
+        }
+
+        .card-url {
+          font-size: 0.75rem;
+          color: var(--accent);
+          margin-top: auto;
+        }
+
+        /* Icon colors */
+        .icon-blue { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .icon-green { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .icon-purple { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .icon-orange { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+        .icon-red { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .icon-cyan { background: rgba(6, 182, 212, 0.2); color: #06b6d4; }
+        .icon-yellow { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .icon-pink { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+
+        .status {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 2rem;
+          padding-top: 1rem;
+          border-top: 1px solid var(--border);
+          font-size: 0.8rem;
+          color: var(--text-muted);
+        }
+
+        .status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #22c55e;
+        }
+
+        footer {
+          text-align: center;
+          margin-top: 3rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid var(--border);
+          color: var(--text-muted);
+          font-size: 0.85rem;
+        }
+
+        footer a {
+          color: var(--accent);
+          text-decoration: none;
+        }
+
+        @media (max-width: 640px) {
+          body { padding: 1rem; }
+          h1 { font-size: 1.75rem; }
+          .grid { grid-template-columns: 1fr; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          <h1>Homelab</h1>
+          <p class="subtitle">lab.axiomlayer.com</p>
+        </header>
+
+        <div class="grid">
+          <h2 class="section-title">Applications</h2>
+
+          <a href="https://plane.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-blue">P</div>
+              <span class="card-title">Plane</span>
+            </div>
+            <p class="card-desc">Project management and issue tracking</p>
+            <span class="card-url">plane.lab.axiomlayer.com</span>
+          </a>
+
+          <a href="https://docs.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-purple">O</div>
+              <span class="card-title">Outline</span>
+            </div>
+            <p class="card-desc">Documentation and knowledge base</p>
+            <span class="card-url">docs.lab.axiomlayer.com</span>
+          </a>
+
+          <a href="https://autom8.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-orange">n8n</div>
+              <span class="card-title">n8n (autom8)</span>
+            </div>
+            <p class="card-desc">Workflow automation platform</p>
+            <span class="card-url">autom8.lab.axiomlayer.com</span>
+          </a>
+
+          <h2 class="section-title">Platform</h2>
+
+          <a href="https://auth.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-cyan">A</div>
+              <span class="card-title">Authentik</span>
+            </div>
+            <p class="card-desc">Identity provider and SSO</p>
+            <span class="card-url">auth.lab.axiomlayer.com</span>
+          </a>
+
+          <a href="https://argocd.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-orange">A</div>
+              <span class="card-title">ArgoCD</span>
+            </div>
+            <p class="card-desc">GitOps continuous delivery</p>
+            <span class="card-url">argocd.lab.axiomlayer.com</span>
+          </a>
+
+          <h2 class="section-title">Observability</h2>
+
+          <a href="https://grafana.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-yellow">G</div>
+              <span class="card-title">Grafana</span>
+            </div>
+            <p class="card-desc">Metrics dashboards and visualization</p>
+            <span class="card-url">grafana.lab.axiomlayer.com</span>
+          </a>
+
+          <a href="https://alerts.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-red">!</div>
+              <span class="card-title">Alertmanager</span>
+            </div>
+            <p class="card-desc">Alert management and routing</p>
+            <span class="card-url">alerts.lab.axiomlayer.com</span>
+          </a>
+
+          <h2 class="section-title">Infrastructure</h2>
+
+          <a href="https://longhorn.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-green">L</div>
+              <span class="card-title">Longhorn</span>
+            </div>
+            <p class="card-desc">Distributed storage management</p>
+            <span class="card-url">longhorn.lab.axiomlayer.com</span>
+          </a>
+
+          <a href="https://telnet.lab.axiomlayer.com" class="card">
+            <div class="card-header">
+              <div class="card-icon icon-pink">T</div>
+              <span class="card-title">Telnet Server</span>
+            </div>
+            <p class="card-desc">Demo application with SSO</p>
+            <span class="card-url">telnet.lab.axiomlayer.com</span>
+          </a>
+        </div>
+
+        <div class="status">
+          <span class="status-dot"></span>
+          <span>All systems operational</span>
+        </div>
+
+        <footer>
+          <p>Powered by K3s, ArgoCD, and Authentik</p>
+          <p><a href="https://github.com/jasencarroll/homelab-gitops">View on GitHub</a></p>
+        </footer>
+      </div>
+    </body>
+    </html>
