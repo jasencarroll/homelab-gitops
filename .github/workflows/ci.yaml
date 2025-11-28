@@ -1,0 +1,89 @@
+name: CI - Lint & Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate-manifests:
+    name: Validate Kustomize Manifests
+    runs-on: [self-hosted, homelab]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate all kustomizations
+        run: |
+          echo "=== Validating Kustomize manifests ==="
+          FAILED=0
+
+          # Find all kustomization.yaml files
+          for kustomization in $(find . -name "kustomization.yaml" -type f); do
+            dir=$(dirname "$kustomization")
+            echo -n "Checking $dir... "
+            if kubectl kustomize "$dir" > /dev/null 2>&1; then
+              echo "✓"
+            else
+              echo "✗ FAILED"
+              kubectl kustomize "$dir" 2>&1 | head -20
+              FAILED=1
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo "::error::Some kustomizations failed validation"
+            exit 1
+          fi
+          echo "=== All manifests valid ==="
+
+  kube-linter:
+    name: Kubernetes Linting
+    runs-on: [self-hosted, homelab]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kube-linter
+        run: |
+          if ! command -v kube-linter &> /dev/null; then
+            curl -sSL https://github.com/stackrox/kube-linter/releases/download/v0.6.8/kube-linter-linux.tar.gz | tar xz
+            sudo mv kube-linter /usr/local/bin/
+          fi
+          kube-linter version
+
+      - name: Lint apps
+        run: |
+          echo "=== Linting apps/ ==="
+          kube-linter lint apps/ --config .kube-linter.yaml || true
+
+      - name: Lint infrastructure
+        run: |
+          echo "=== Linting infrastructure/ ==="
+          kube-linter lint infrastructure/ --config .kube-linter.yaml || true
+
+  trivy-scan:
+    name: Security Scanning
+    runs-on: [self-hosted, homelab]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          if ! command -v trivy &> /dev/null; then
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v0.58.0
+          fi
+          trivy version
+
+      - name: Scan configuration files
+        run: |
+          echo "=== Scanning for misconfigurations ==="
+          trivy config . --severity HIGH,CRITICAL --exit-code 0
+
+      - name: Scan for secrets
+        run: |
+          echo "=== Scanning for exposed secrets ==="
+          trivy fs . --scanners secret --exit-code 1

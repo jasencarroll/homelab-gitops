@@ -1,0 +1,11 @@
+checks:
+  # Exclude checks that don't apply to homelab environment
+  exclude:
+    # We use Longhorn for storage, not emptyDir concerns
+    - "no-read-only-root-fs"  # Some apps need writable fs (Open WebUI)
+    # Homelab doesn't need anti-affinity for single replicas
+    - "no-anti-affinity"
+    # We intentionally use latest/main tags in some cases (tracked separately)
+    - "latest-tag"
+
+customChecks: []
