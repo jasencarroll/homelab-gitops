@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik-helm
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.goauthentik.io
+    chart: authentik
+    targetRevision: 2025.10.2
+    helm:
+      valuesObject:
+        global:
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-helm-secrets
+                  key: secret_key
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-helm-secrets
+                  key: postgresql_password
+        authentik:
+          postgresql:
+            password: ""  # Set via env var above
+          secret_key: ""  # Set via env var above
+        postgresql:
+          enabled: true
+          auth:
+            password: ""  # Will use existing secret
+            existingSecret: authentik-helm-secrets
+            secretKeys:
+              adminPasswordKey: postgresql_password
+        redis:
+          enabled: true
+        server:
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - auth.lab.axiomlayer.com
+            tls:
+              - hosts:
+                  - auth.lab.axiomlayer.com
+                secretName: authentik-tls
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
