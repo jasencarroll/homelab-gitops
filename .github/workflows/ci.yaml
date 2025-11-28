@@ -123,3 +123,24 @@ jobs:
             -H "Content-Type: application/json" \
             "https://${ARGOCD_SERVER}/api/v1/applications/applications/sync" \
             -d '{"prune": true}' || echo "Sync trigger sent (may require manual approval)"
+
+  # Post-deployment tests - run after ArgoCD sync
+  integration-tests:
+    name: Integration Tests
+    runs-on: [self-hosted, homelab]
+    needs: [ci-passed]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait for ArgoCD sync
+        run: |
+          echo "Waiting 60s for ArgoCD to sync changes..."
+          sleep 60
+
+      - name: Run smoke tests
+        run: ./tests/smoke-test.sh
+
+      - name: Run auth tests
+        run: ./tests/test-auth.sh
