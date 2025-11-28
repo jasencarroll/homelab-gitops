@@ -1,0 +1,26 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: homelab-runners
+  namespace: actions-runner
+  labels:
+    app.kubernetes.io/name: actions-runner
+    app.kubernetes.io/component: runner
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
+spec:
+  replicas: 1
+  template:
+    spec:
+      organization: jasencarroll
+      labels:
+        - homelab
+        - self-hosted
+      dockerEnabled: true
+      resources:
+        requests:
+          cpu: 500m
+          memory: 512Mi
+        limits:
+          cpu: 2000m
+          memory: 2Gi

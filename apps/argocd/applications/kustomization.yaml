@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - actions-runner-controller.yaml
   - actions-runner-infra.yaml
-  - actions-runner-set.yaml
   - alertmanager.yaml
   - authentik.yaml
   - cert-manager.yaml
