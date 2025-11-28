@@ -12,6 +12,11 @@ spec:
     helm:
       releaseName: velero
       values: |
+        kubectl:
+          image:
+            repository: bitnami/kubectl
+            tag: "1.31"
+
         initContainers:
           - name: velero-plugin-for-aws
             image: velero/velero-plugin-for-aws:v1.11.0
