@@ -94,7 +94,7 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
-    # Allow Authentik for OIDC
+    # Allow Authentik for OIDC (direct connection)
     - to:
         - namespaceSelector:
             matchLabels:
@@ -104,6 +104,26 @@ spec:
           port: 9000
         - protocol: TCP
           port: 9443
+        - protocol: TCP
+          port: 80
+    # Allow Traefik for OIDC via ingress (auth.lab.axiomlayer.com)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow HTTPS to Tailscale network for OIDC (auth.lab.axiomlayer.com resolves to Tailscale IP)
+    - to:
+        - ipBlock:
+            cidr: 100.64.0.0/10
+      ports:
+        - protocol: TCP
+          port: 443
 ---
 # Allow Redis ingress from Outline
 apiVersion: networking.k8s.io/v1
