@@ -9,15 +9,15 @@ metadata:
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 data:
-  # Ollama connection - update OLLAMA_HOST with your workstation's Tailscale IP
-  OLLAMA_BASE_URL: "http://WORKSTATION_TAILSCALE_IP:11434"
-  # Disable bundled Ollama since we're using external
-  ENABLE_OLLAMA_API: "true"
+  # Ollama connection (siberian workstation via Tailscale)
+  OLLAMA_BASE_URL: "http://100.115.3.88:11434"
   # WebUI settings
   WEBUI_NAME: "AxiomLayer AI"
   WEBUI_URL: "https://ai.lab.axiomlayer.com"
-  # Auth settings - using Authentik for SSO
-  ENABLE_SIGNUP: "false"
+  # Auth - allow signup for first user, then disable
+  ENABLE_SIGNUP: "true"
   DEFAULT_USER_ROLE: "user"
-  # Disable OpenAI by default (can enable later if needed)
+  # Disable OpenAI by default
   ENABLE_OPENAI_API: "false"
+  # Data directory
+  DATA_DIR: "/app/backend/data"

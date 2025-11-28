@@ -35,6 +35,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: open-webui-config
+            - secretRef:
+                name: open-webui-secret
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
