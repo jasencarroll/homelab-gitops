@@ -71,3 +71,11 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Allow access to Prometheus for metrics
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090

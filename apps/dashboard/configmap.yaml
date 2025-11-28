@@ -15,7 +15,10 @@ data:
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Homelab | axiomlayer.com</title>
+      <title>axiomlayer</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -30,7 +33,7 @@ data:
         }
 
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           background: var(--bg);
           color: var(--text);
           min-height: 100vh;
@@ -44,29 +47,84 @@ data:
 
         header {
           text-align: center;
-          margin-bottom: 3rem;
+          margin-bottom: 2rem;
         }
 
-        h1 {
+        .title {
           font-size: 2.5rem;
           font-weight: 300;
           letter-spacing: -0.02em;
-          margin-bottom: 0.5rem;
         }
 
-        .subtitle {
+        /* Metrics Panel - Railway style */
+        .metrics-panel {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.25rem;
+          margin-bottom: 2rem;
+          padding: 1.5rem;
+          background: var(--card-bg);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+        }
+
+        .metric {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .metric-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .metric-label {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
           color: var(--text-muted);
-          font-size: 1rem;
+        }
+
+        .metric-value {
+          font-size: 1.75rem;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .metric-graph {
+          height: 48px;
+          position: relative;
+        }
+
+        .metric-graph canvas {
+          width: 100%;
+          height: 100%;
+        }
+
+        .metric-detail {
+          font-size: 0.75rem;
+          color: var(--text-muted);
         }
 
         .grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
           gap: 1rem;
+          max-width: 940px;
+          margin: 0 auto;
+        }
+
+        .grid .card {
+          width: calc(33.333% - 0.67rem);
+          min-width: 280px;
+          max-width: 300px;
         }
 
         .section-title {
-          grid-column: 1 / -1;
+          width: 100%;
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.1em;
@@ -75,6 +133,7 @@ data:
           margin-bottom: 0.5rem;
           padding-bottom: 0.5rem;
           border-bottom: 1px solid var(--border);
+          text-align: center;
         }
 
         .section-title:first-of-type {
@@ -133,6 +192,30 @@ data:
           margin-top: auto;
         }
 
+        .card {
+          position: relative;
+        }
+
+        .card-status {
+          position: absolute;
+          top: 1rem;
+          right: 1rem;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--border);
+        }
+
+        .card-status.online {
+          background: #22c55e;
+          box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+        }
+
+        .card-status.offline {
+          background: #ef4444;
+          box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+        }
+
         /* Icon colors */
         .icon-blue { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
         .icon-green { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
@@ -146,6 +229,7 @@ data:
         .status {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 0.5rem;
           margin-top: 2rem;
           padding-top: 1rem;
@@ -159,40 +243,82 @@ data:
           height: 8px;
           border-radius: 50%;
           background: #22c55e;
+          animation: pulse 2s infinite;
         }
 
-        footer {
-          text-align: center;
-          margin-top: 3rem;
-          padding-top: 1.5rem;
-          border-top: 1px solid var(--border);
-          color: var(--text-muted);
-          font-size: 0.85rem;
-        }
-
-        footer a {
-          color: var(--accent);
-          text-decoration: none;
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
 
         @media (max-width: 640px) {
           body { padding: 1rem; }
-          h1 { font-size: 1.75rem; }
-          .grid { grid-template-columns: 1fr; }
+          .title { font-size: 1.75rem; }
+          .grid .card { width: 100%; max-width: 100%; }
+          .metrics-panel { grid-template-columns: 1fr; }
+          .metric-value { font-size: 1.25rem; }
+          .metric-graph { height: 40px; }
         }
       </style>
     </head>
     <body>
       <div class="container">
         <header>
-          <h1>Homelab</h1>
-          <p class="subtitle">lab.axiomlayer.com</p>
+          <p class="title">axiomlayer</p>
         </header>
+
+        <!-- Metrics Panel -->
+        <div class="metrics-panel">
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">CPU</span>
+            </div>
+            <span class="metric-value" id="cpu-value">--</span>
+            <div class="metric-graph">
+              <canvas id="cpu-graph"></canvas>
+            </div>
+            <span class="metric-detail" id="cpu-detail">Loading...</span>
+          </div>
+
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">Memory</span>
+            </div>
+            <span class="metric-value" id="memory-value">--</span>
+            <div class="metric-graph">
+              <canvas id="memory-graph"></canvas>
+            </div>
+            <span class="metric-detail" id="memory-detail">Loading...</span>
+          </div>
+
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">Storage</span>
+            </div>
+            <span class="metric-value" id="storage-value">--</span>
+            <div class="metric-graph">
+              <canvas id="storage-graph"></canvas>
+            </div>
+            <span class="metric-detail" id="storage-detail">Loading...</span>
+          </div>
+
+          <div class="metric">
+            <div class="metric-header">
+              <span class="metric-label">Network</span>
+            </div>
+            <span class="metric-value" id="network-value">--</span>
+            <div class="metric-graph">
+              <canvas id="network-graph"></canvas>
+            </div>
+            <span class="metric-detail" id="network-detail">Loading...</span>
+          </div>
+        </div>
 
         <div class="grid">
           <h2 class="section-title">Applications</h2>
 
-          <a href="https://ai.lab.axiomlayer.com" class="card">
+          <a href="https://ai.lab.axiomlayer.com" class="card" data-url="https://ai.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-green">AI</div>
               <span class="card-title">Open WebUI</span>
@@ -201,7 +327,8 @@ data:
             <span class="card-url">ai.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://chat.lab.axiomlayer.com" class="card">
+          <a href="https://chat.lab.axiomlayer.com" class="card" data-url="https://chat.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-red">C</div>
               <span class="card-title">Campfire</span>
@@ -210,7 +337,8 @@ data:
             <span class="card-url">chat.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://plane.lab.axiomlayer.com" class="card">
+          <a href="https://plane.lab.axiomlayer.com" class="card" data-url="https://plane.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-blue">P</div>
               <span class="card-title">Plane</span>
@@ -219,7 +347,8 @@ data:
             <span class="card-url">plane.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://docs.lab.axiomlayer.com" class="card">
+          <a href="https://docs.lab.axiomlayer.com" class="card" data-url="https://docs.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-purple">O</div>
               <span class="card-title">Outline</span>
@@ -228,7 +357,8 @@ data:
             <span class="card-url">docs.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://autom8.lab.axiomlayer.com" class="card">
+          <a href="https://autom8.lab.axiomlayer.com" class="card" data-url="https://autom8.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-orange">n8n</div>
               <span class="card-title">n8n (autom8)</span>
@@ -239,7 +369,8 @@ data:
 
           <h2 class="section-title">Platform</h2>
 
-          <a href="https://auth.lab.axiomlayer.com" class="card">
+          <a href="https://auth.lab.axiomlayer.com" class="card" data-url="https://auth.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-cyan">A</div>
               <span class="card-title">Authentik</span>
@@ -248,7 +379,8 @@ data:
             <span class="card-url">auth.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://argocd.lab.axiomlayer.com" class="card">
+          <a href="https://argocd.lab.axiomlayer.com" class="card" data-url="https://argocd.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-orange">A</div>
               <span class="card-title">ArgoCD</span>
@@ -259,7 +391,8 @@ data:
 
           <h2 class="section-title">Observability</h2>
 
-          <a href="https://grafana.lab.axiomlayer.com" class="card">
+          <a href="https://grafana.lab.axiomlayer.com" class="card" data-url="https://grafana.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-yellow">G</div>
               <span class="card-title">Grafana</span>
@@ -268,7 +401,8 @@ data:
             <span class="card-url">grafana.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://alerts.lab.axiomlayer.com" class="card">
+          <a href="https://alerts.lab.axiomlayer.com" class="card" data-url="https://alerts.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-red">!</div>
               <span class="card-title">Alertmanager</span>
@@ -279,7 +413,8 @@ data:
 
           <h2 class="section-title">Infrastructure</h2>
 
-          <a href="https://longhorn.lab.axiomlayer.com" class="card">
+          <a href="https://longhorn.lab.axiomlayer.com" class="card" data-url="https://longhorn.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-green">L</div>
               <span class="card-title">Longhorn</span>
@@ -288,7 +423,8 @@ data:
             <span class="card-url">longhorn.lab.axiomlayer.com</span>
           </a>
 
-          <a href="https://telnet.lab.axiomlayer.com" class="card">
+          <a href="https://telnet.lab.axiomlayer.com" class="card" data-url="https://telnet.lab.axiomlayer.com" target="_blank">
+            <span class="card-status"></span>
             <div class="card-header">
               <div class="card-icon icon-pink">T</div>
               <span class="card-title">Telnet Server</span>
@@ -303,10 +439,326 @@ data:
           <span>All systems operational</span>
         </div>
 
-        <footer>
-          <p>Powered by K3s, ArgoCD, and Authentik</p>
-          <p><a href="https://github.com/jasencdev/axiomlayer">View on GitHub</a></p>
-        </footer>
       </div>
+
+      <script>
+        const PROMETHEUS_URL = '/api/prometheus';
+        const MAX_POINTS = 30;
+
+        // Historical data storage
+        const history = {
+          cpu: [],
+          memory: [],
+          storage: [],
+          network: []
+        };
+
+        // Graph colors
+        const colors = {
+          cpu: { line: '#3b82f6', fill: 'rgba(59, 130, 246, 0.15)' },
+          memory: { line: '#a855f7', fill: 'rgba(168, 85, 247, 0.15)' },
+          storage: { line: '#22c55e', fill: 'rgba(34, 197, 94, 0.15)' },
+          network: { line: '#f97316', fill: 'rgba(249, 115, 22, 0.15)' }
+        };
+
+        async function queryPrometheus(query) {
+          try {
+            const response = await fetch(`${PROMETHEUS_URL}/api/v1/query?query=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            if (data.status === 'success' && data.data.result.length > 0) {
+              return parseFloat(data.data.result[0].value[1]);
+            }
+          } catch (e) {
+            console.error('Prometheus query failed:', e);
+          }
+          return null;
+        }
+
+        async function queryPrometheusRange(query, duration = '5m', step = '10s') {
+          try {
+            const end = Math.floor(Date.now() / 1000);
+            const start = end - parseDuration(duration);
+            const response = await fetch(`${PROMETHEUS_URL}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${end}&step=${step}`);
+            const data = await response.json();
+            if (data.status === 'success' && data.data.result.length > 0) {
+              return data.data.result[0].values.map(v => parseFloat(v[1]));
+            }
+          } catch (e) {
+            console.error('Prometheus range query failed:', e);
+          }
+          return [];
+        }
+
+        function parseDuration(d) {
+          const match = d.match(/(\d+)([smh])/);
+          if (!match) return 300;
+          const val = parseInt(match[1]);
+          const unit = match[2];
+          if (unit === 's') return val;
+          if (unit === 'm') return val * 60;
+          if (unit === 'h') return val * 3600;
+          return 300;
+        }
+
+        function formatBytes(bytes) {
+          if (bytes === 0) return '0 B';
+          const k = 1024;
+          const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function formatBytesPerSec(bytes) {
+          if (bytes === 0) return '0 B/s';
+          const k = 1024;
+          const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function drawSparkline(canvasId, data, color, maxValue = 100) {
+          const canvas = document.getElementById(canvasId);
+          if (!canvas || data.length === 0) return;
+
+          const ctx = canvas.getContext('2d');
+          const rect = canvas.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          ctx.scale(dpr, dpr);
+
+          const width = rect.width;
+          const height = rect.height;
+          const padding = 2;
+
+          ctx.clearRect(0, 0, width, height);
+
+          if (data.length < 2) return;
+
+          const xStep = (width - padding * 2) / (MAX_POINTS - 1);
+          const yScale = (height - padding * 2) / maxValue;
+
+          // Draw filled area
+          ctx.beginPath();
+          ctx.moveTo(padding, height - padding);
+
+          data.forEach((val, i) => {
+            const x = padding + i * xStep;
+            const y = height - padding - (val * yScale);
+            if (i === 0) {
+              ctx.lineTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          });
+
+          ctx.lineTo(padding + (data.length - 1) * xStep, height - padding);
+          ctx.closePath();
+          ctx.fillStyle = color.fill;
+          ctx.fill();
+
+          // Draw line
+          ctx.beginPath();
+          data.forEach((val, i) => {
+            const x = padding + i * xStep;
+            const y = height - padding - (val * yScale);
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          });
+          ctx.strokeStyle = color.line;
+          ctx.lineWidth = 1.5;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+        }
+
+        function addToHistory(key, value) {
+          history[key].push(value);
+          if (history[key].length > MAX_POINTS) {
+            history[key].shift();
+          }
+        }
+
+        async function updateMetrics() {
+          // CPU Usage
+          const cpuUsage = await queryPrometheus('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)');
+          if (cpuUsage !== null) {
+            document.getElementById('cpu-value').textContent = cpuUsage.toFixed(1) + '%';
+            addToHistory('cpu', cpuUsage);
+            drawSparkline('cpu-graph', history.cpu, colors.cpu, 100);
+            const cores = await queryPrometheus('count(node_cpu_seconds_total{mode="idle"})');
+            document.getElementById('cpu-detail').textContent = cores ? `${cores} cores across cluster` : 'Cluster average';
+          }
+
+          // Memory Usage
+          const memTotal = await queryPrometheus('sum(node_memory_MemTotal_bytes)');
+          const memAvail = await queryPrometheus('sum(node_memory_MemAvailable_bytes)');
+          if (memTotal !== null && memAvail !== null) {
+            const memUsed = memTotal - memAvail;
+            const memPercent = (memUsed / memTotal) * 100;
+            document.getElementById('memory-value').textContent = memPercent.toFixed(1) + '%';
+            addToHistory('memory', memPercent);
+            drawSparkline('memory-graph', history.memory, colors.memory, 100);
+            document.getElementById('memory-detail').textContent = `${formatBytes(memUsed)} / ${formatBytes(memTotal)}`;
+          }
+
+          // Storage Usage
+          const storageTotal = await queryPrometheus('sum(node_filesystem_size_bytes{mountpoint="/",fstype!="rootfs"})');
+          const storageAvail = await queryPrometheus('sum(node_filesystem_avail_bytes{mountpoint="/",fstype!="rootfs"})');
+          if (storageTotal !== null && storageAvail !== null) {
+            const storageUsed = storageTotal - storageAvail;
+            const storagePercent = (storageUsed / storageTotal) * 100;
+            document.getElementById('storage-value').textContent = storagePercent.toFixed(1) + '%';
+            addToHistory('storage', storagePercent);
+            drawSparkline('storage-graph', history.storage, colors.storage, 100);
+            document.getElementById('storage-detail').textContent = `${formatBytes(storageUsed)} / ${formatBytes(storageTotal)}`;
+          }
+
+          // Network throughput
+          const netRx = await queryPrometheus('sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*|cni.*|flannel.*"}[5m]))');
+          const netTx = await queryPrometheus('sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|cni.*|flannel.*"}[5m]))');
+          if (netRx !== null && netTx !== null) {
+            const totalNet = netRx + netTx;
+            document.getElementById('network-value').textContent = formatBytesPerSec(totalNet);
+            addToHistory('network', totalNet);
+            // Dynamic max for network graph
+            const maxNet = Math.max(...history.network, 1024 * 1024);
+            drawSparkline('network-graph', history.network, colors.network, maxNet);
+            document.getElementById('network-detail').textContent = `↓ ${formatBytesPerSec(netRx)} ↑ ${formatBytesPerSec(netTx)}`;
+          }
+        }
+
+        // Load historical data on startup
+        async function loadHistoricalData() {
+          // CPU history
+          const cpuHistory = await queryPrometheusRange('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)', '5m', '10s');
+          if (cpuHistory.length > 0) {
+            history.cpu = cpuHistory.slice(-MAX_POINTS);
+            drawSparkline('cpu-graph', history.cpu, colors.cpu, 100);
+          }
+
+          // Memory history
+          const memTotalHist = await queryPrometheusRange('sum(node_memory_MemTotal_bytes)', '5m', '10s');
+          const memAvailHist = await queryPrometheusRange('sum(node_memory_MemAvailable_bytes)', '5m', '10s');
+          if (memTotalHist.length > 0 && memAvailHist.length > 0) {
+            history.memory = memTotalHist.slice(-MAX_POINTS).map((total, i) => {
+              const avail = memAvailHist[i] || 0;
+              return ((total - avail) / total) * 100;
+            });
+            drawSparkline('memory-graph', history.memory, colors.memory, 100);
+          }
+
+          // Storage history
+          const storageTotalHist = await queryPrometheusRange('sum(node_filesystem_size_bytes{mountpoint="/",fstype!="rootfs"})', '5m', '10s');
+          const storageAvailHist = await queryPrometheusRange('sum(node_filesystem_avail_bytes{mountpoint="/",fstype!="rootfs"})', '5m', '10s');
+          if (storageTotalHist.length > 0 && storageAvailHist.length > 0) {
+            history.storage = storageTotalHist.slice(-MAX_POINTS).map((total, i) => {
+              const avail = storageAvailHist[i] || 0;
+              return ((total - avail) / total) * 100;
+            });
+            drawSparkline('storage-graph', history.storage, colors.storage, 100);
+          }
+
+          // Network history
+          const netRxHist = await queryPrometheusRange('sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*|cni.*|flannel.*"}[1m]))', '5m', '10s');
+          const netTxHist = await queryPrometheusRange('sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|cni.*|flannel.*"}[1m]))', '5m', '10s');
+          if (netRxHist.length > 0 && netTxHist.length > 0) {
+            history.network = netRxHist.slice(-MAX_POINTS).map((rx, i) => {
+              const tx = netTxHist[i] || 0;
+              return rx + tx;
+            });
+            const maxNet = Math.max(...history.network, 1024 * 1024);
+            drawSparkline('network-graph', history.network, colors.network, maxNet);
+          }
+        }
+
+        // Initial load with historical data
+        loadHistoricalData().then(() => updateMetrics());
+        // Refresh every 2.5 seconds
+        setInterval(updateMetrics, 2500);
+
+        // Redraw on resize
+        window.addEventListener('resize', () => {
+          drawSparkline('cpu-graph', history.cpu, colors.cpu, 100);
+          drawSparkline('memory-graph', history.memory, colors.memory, 100);
+          drawSparkline('storage-graph', history.storage, colors.storage, 100);
+          const maxNet = Math.max(...history.network, 1024 * 1024);
+          drawSparkline('network-graph', history.network, colors.network, maxNet);
+        });
+
+        // Status checking via Prometheus pod metrics
+        const appNamespaces = {
+          'ai.lab.axiomlayer.com': 'open-webui',
+          'chat.lab.axiomlayer.com': 'campfire',
+          'plane.lab.axiomlayer.com': 'plane',
+          'docs.lab.axiomlayer.com': 'outline',
+          'autom8.lab.axiomlayer.com': 'n8n',
+          'auth.lab.axiomlayer.com': 'authentik',
+          'argocd.lab.axiomlayer.com': 'argocd',
+          'grafana.lab.axiomlayer.com': 'monitoring',
+          'alerts.lab.axiomlayer.com': 'monitoring',
+          'longhorn.lab.axiomlayer.com': 'longhorn-system',
+          'telnet.lab.axiomlayer.com': 'telnet-server'
+        };
+
+        async function checkNamespaceHealth(namespace) {
+          try {
+            const query = `sum(kube_pod_status_phase{namespace="${namespace}",phase="Running"}) > 0`;
+            const response = await fetch(`${PROMETHEUS_URL}/api/v1/query?query=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            return data.status === 'success' && data.data.result.length > 0;
+          } catch (e) {
+            return false;
+          }
+        }
+
+        async function updateAppStatuses() {
+          const cards = document.querySelectorAll('.card[data-url]');
+          let allOnline = true;
+          const checkedNamespaces = {};
+
+          for (const card of cards) {
+            const url = card.dataset.url;
+            const statusEl = card.querySelector('.card-status');
+            if (!statusEl) continue;
+
+            const hostname = new URL(url).hostname;
+            const namespace = appNamespaces[hostname];
+            if (!namespace) continue;
+
+            // Cache namespace checks
+            if (!(namespace in checkedNamespaces)) {
+              checkedNamespaces[namespace] = await checkNamespaceHealth(namespace);
+            }
+
+            const isOnline = checkedNamespaces[namespace];
+            statusEl.classList.toggle('online', isOnline);
+            statusEl.classList.toggle('offline', !isOnline);
+
+            if (!isOnline) allOnline = false;
+          }
+
+          // Update overall status
+          const statusText = document.querySelector('.status span:last-child');
+          const statusDot = document.querySelector('.status-dot');
+          if (statusText && statusDot) {
+            if (allOnline) {
+              statusText.textContent = 'All systems operational';
+              statusDot.style.background = '#22c55e';
+            } else {
+              statusText.textContent = 'Some services unavailable';
+              statusDot.style.background = '#ef4444';
+            }
+          }
+        }
+
+        // Check statuses on load and periodically
+        updateAppStatuses();
+        setInterval(updateAppStatuses, 30000);
+      </script>
     </body>
     </html>
