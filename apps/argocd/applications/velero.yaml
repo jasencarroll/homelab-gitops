@@ -12,6 +12,8 @@ spec:
     helm:
       releaseName: velero
       values: |
+        upgradeCRDs: false
+
         initContainers:
           - name: velero-plugin-for-aws
             image: velero/velero-plugin-for-aws:v1.11.0
