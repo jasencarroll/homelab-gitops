@@ -557,8 +557,8 @@ kubectl apply -k apps/argocd/applications
 - [x] Documentation wiki (Outline)
 - [x] Project management (Plane)
 - [x] Alerting (Alertmanager)
-- [ ] CI/CD pipelines (GitHub Actions self-hosted runners)
-- [ ] Backup automation (Longhorn → NAS)
+- [ ] CI/CD pipelines (GitHub Actions self-hosted runners) - in progress
+- [ ] Backup automation (Longhorn → NAS) - needs NFS share setup
 
 ---
 
