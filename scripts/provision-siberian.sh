@@ -135,13 +135,44 @@ alias l='ls -CF'
 # Ollama aliases
 alias ollama-logs='journalctl -u ollama -f'
 alias ollama-status='systemctl status ollama'
+
+# Codex alias (uses local Ollama)
+alias cx='codex'
 ZSHRC
 
 chown $USERNAME:$USERNAME "$USER_HOME/.zshrc"
 chsh -s $(which zsh) $USERNAME
 
 # ============================================
-# 8. NVIDIA Drivers (5070 Ti / Blackwell)
+# 8. Node.js 22 LTS + Codex CLI
+# ============================================
+echo "=== Installing Node.js 22 LTS ==="
+if ! command -v node &> /dev/null || [[ $(node -v | cut -d'.' -f1 | tr -d 'v') -lt 22 ]]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt install -y nodejs
+fi
+
+echo "=== Installing Codex CLI ==="
+npm install -g @openai/codex
+
+# Create Codex config directory and config for user
+CODEX_CONFIG_DIR="$USER_HOME/.codex"
+mkdir -p "$CODEX_CONFIG_DIR"
+
+cat > "$CODEX_CONFIG_DIR/config.toml" << 'CODEXCFG'
+# Codex CLI configuration for local Ollama inference
+model = "gpt-oss:20b"
+
+[providers.ollama]
+name = "ollama"
+base_url = "http://localhost:11434/v1"
+env_key = ""
+CODEXCFG
+
+chown -R $USERNAME:$USERNAME "$CODEX_CONFIG_DIR"
+
+# ============================================
+# 9. NVIDIA Drivers (5070 Ti / Blackwell)
 # ============================================
 echo "=== Installing NVIDIA drivers ==="
 
@@ -157,7 +188,7 @@ ubuntu-drivers install
 apt install -y nvidia-cuda-toolkit
 
 # ============================================
-# 9. Ollama Installation
+# 10. Ollama Installation
 # ============================================
 echo "=== Installing Ollama ==="
 
@@ -224,11 +255,17 @@ echo "   infrastructure/open-webui/configmap.yaml"
 echo "   Change OLLAMA_BASE_URL to: http://<YOUR_TAILSCALE_IP>:11434"
 echo ""
 echo "=== Recommended Models for 5070 Ti (16GB VRAM) ==="
-echo "ollama pull llama3.2:3b      # Fast, general purpose (2GB)"
-echo "ollama pull llama3.1:8b      # Good balance (5GB)"
-echo "ollama pull codellama:13b    # Code assistance (8GB)"
-echo "ollama pull deepseek-r1:14b  # Reasoning model (9GB)"
-echo "ollama pull qwen2.5:14b      # Strong multilingual (9GB)"
+echo "ollama pull llama3.2:3b         # Fast, general purpose (2GB)"
+echo "ollama pull llama3.1:8b         # Good balance (5GB)"
+echo "ollama pull codellama:13b       # Code assistance (8GB)"
+echo "ollama pull deepseek-r1:14b     # Reasoning model (9GB)"
+echo "ollama pull qwen2.5:14b         # Strong multilingual (9GB)"
+echo "ollama pull qwen2.5-coder:14b   # Coding model for Codex (9GB)"
+echo ""
+echo "=== Codex CLI ==="
+echo "Codex CLI installed and configured at ~/.codex/config.toml"
+echo "Using model: gpt-oss:20b"
+echo "Run Codex:   codex"
 echo ""
 echo "NOTE: SSH is now on port $SSH_PORT"
 echo "      Reconnect with: ssh -p $SSH_PORT $USERNAME@<ip>"
