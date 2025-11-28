@@ -15,6 +15,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+          kubectl version --client
+
       - name: Validate all kustomizations
         run: |
           echo "=== Validating Kustomize manifests ==="
