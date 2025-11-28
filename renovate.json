@@ -2,16 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    "docker:enableMajor",
-    ":disableRateLimiting"
+    "docker:enableMajor"
   ],
   "timezone": "America/New_York",
   "schedule": ["after 9am and before 5pm every weekday"],
   "labels": ["dependencies", "renovate"],
   "commitMessagePrefix": "chore(deps):",
-  "kubernetes": {
-    "fileMatch": ["\\.yaml$"]
-  },
   "packageRules": [
     {
       "description": "Group all patch updates",
@@ -36,18 +32,6 @@
       "matchManagers": ["github-actions"],
       "groupName": "github actions",
       "automerge": true
-    }
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Update container image digests in Kubernetes manifests",
-      "fileMatch": ["\\.yaml$"],
-      "matchStrings": [
-        "image:\\s*(?<depName>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
-      ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
     }
   ]
 }
