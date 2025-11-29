@@ -37,5 +37,5 @@ metadata:
     app.kubernetes.io/part-of: argocd
 data:
   policy.csv: |
-    g, jasen, role:admin
+    g, jasen@axiomlayer.com, role:admin
   scopes: "[email]"
