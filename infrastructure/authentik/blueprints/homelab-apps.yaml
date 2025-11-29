@@ -142,7 +142,7 @@ entries:
       invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
       client_type: confidential
       client_id: grafana
-      client_secret: "grafana-oidc-secret-change-me"
+      client_secret: "b023d23d0199ab3e85ccb1a31dd861ca0e45cebbc8ae5cd992bd93643a4df409"
       redirect_uris:
         - matching_mode: strict
           url: https://grafana.lab.axiomlayer.com/login/generic_oauth
