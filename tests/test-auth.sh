@@ -89,13 +89,37 @@ for app in "${FORWARD_AUTH_APPS[@]}"; do
     fi
 done
 
-section "Native OIDC Apps"
+section "HTTPS Connectivity"
+
+# Test that apps respond properly over HTTPS (TLS handshake + HTTP response)
+# Uses -k to skip cert verification (internal certs), tests that TLS connection succeeds
+HTTPS_APPS=(
+    "plane.lab.axiomlayer.com:Plane"
+    "grafana.lab.axiomlayer.com:Grafana"
+    "argocd.lab.axiomlayer.com:ArgoCD"
+    "docs.lab.axiomlayer.com:Outline"
+)
+
+for app in "${HTTPS_APPS[@]}"; do
+    URL="${app%%:*}"
+    NAME="${app##*:}"
+
+    # Test HTTPS connection works (skip cert verification with -k)
+    STATUS=$(curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 10 "https://$URL/" 2>/dev/null)
+
+    if [ -n "$STATUS" ] && [ "$STATUS" != "000" ]; then
+        pass "$NAME HTTPS connection successful (HTTP $STATUS)"
+    else
+        fail "$NAME HTTPS connection failed (HTTP $STATUS)"
+    fi
+done
+
+section "Native OIDC Apps - Basic Access"
 
 # Apps with native OIDC should return 200 (login page)
 OIDC_APPS=(
     "argocd.lab.axiomlayer.com:ArgoCD"
     "grafana.lab.axiomlayer.com:Grafana"
-    "docs.lab.axiomlayer.com:Outline"
     "plane.lab.axiomlayer.com:Plane"
 )
 
@@ -111,14 +135,134 @@ for app in "${OIDC_APPS[@]}"; do
     fi
 done
 
-section "OIDC Endpoints"
+section "OIDC Provider Configuration"
 
-# Check OIDC discovery endpoint
-OIDC_DISCOVERY=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/outline/.well-known/openid-configuration" 2>/dev/null)
-if echo "$OIDC_DISCOVERY" | grep -q "issuer"; then
-    pass "OIDC discovery endpoint is working"
+# Check OIDC discovery endpoints for each provider
+OIDC_PROVIDERS=(
+    "argocd:ArgoCD"
+    "grafana:Grafana"
+    "plane:Plane"
+)
+
+for provider in "${OIDC_PROVIDERS[@]}"; do
+    SLUG="${provider%%:*}"
+    NAME="${provider##*:}"
+
+    OIDC_DISCOVERY=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/$SLUG/.well-known/openid-configuration" 2>/dev/null)
+    if echo "$OIDC_DISCOVERY" | grep -q "issuer"; then
+        pass "$NAME OIDC provider discovery endpoint working"
+    else
+        fail "$NAME OIDC provider discovery endpoint not found"
+    fi
+done
+
+section "ArgoCD OIDC Integration"
+
+# Check ArgoCD serves its UI (it's a React app, so check for JS bundle)
+ARGOCD_LOGIN_PAGE=$(curl -sk "https://argocd.lab.axiomlayer.com/" 2>/dev/null)
+if echo "$ARGOCD_LOGIN_PAGE" | grep -qi "argocd\|script\|app"; then
+    pass "ArgoCD UI loads successfully"
 else
-    fail "OIDC discovery endpoint failed"
+    fail "ArgoCD UI not loading"
+fi
+
+# Check ArgoCD auth callback endpoint
+ARGOCD_CALLBACK=$(curl -sk -o /dev/null -w "%{http_code}" "https://argocd.lab.axiomlayer.com/auth/callback" 2>/dev/null)
+if [ "$ARGOCD_CALLBACK" = "400" ] || [ "$ARGOCD_CALLBACK" = "302" ] || [ "$ARGOCD_CALLBACK" = "200" ]; then
+    pass "ArgoCD auth callback endpoint exists (HTTP $ARGOCD_CALLBACK)"
+else
+    fail "ArgoCD auth callback endpoint not responding (HTTP $ARGOCD_CALLBACK)"
+fi
+
+# Verify ArgoCD OIDC config in cluster
+ARGOCD_OIDC_CONFIG=$(kubectl get configmap argocd-cm -n argocd -o jsonpath='{.data.oidc\.config}' 2>/dev/null)
+if echo "$ARGOCD_OIDC_CONFIG" | grep -q "auth.lab.axiomlayer.com"; then
+    pass "ArgoCD OIDC configured to use Authentik"
+else
+    fail "ArgoCD OIDC not configured for Authentik"
+fi
+
+# Verify ArgoCD can initiate OIDC flow (should redirect to Authentik authorize endpoint)
+ARGOCD_LOGIN_RESP=$(curl -sk "https://argocd.lab.axiomlayer.com/auth/login?return_url=https://argocd.lab.axiomlayer.com/" 2>/dev/null)
+ARGOCD_LOGIN_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://argocd.lab.axiomlayer.com/auth/login?return_url=https://argocd.lab.axiomlayer.com/" 2>/dev/null)
+ARGOCD_LOGIN_LOCATION=$(curl -sk -I "https://argocd.lab.axiomlayer.com/auth/login?return_url=https://argocd.lab.axiomlayer.com/" 2>/dev/null | grep -i "location:" | head -1)
+
+if [ "$ARGOCD_LOGIN_STATUS" = "302" ] || [ "$ARGOCD_LOGIN_STATUS" = "303" ] || [ "$ARGOCD_LOGIN_STATUS" = "307" ]; then
+    if echo "$ARGOCD_LOGIN_LOCATION" | grep -q "auth.lab.axiomlayer.com"; then
+        pass "ArgoCD OIDC login redirects to Authentik"
+    else
+        fail "ArgoCD OIDC login redirects but not to Authentik (location: $ARGOCD_LOGIN_LOCATION)"
+    fi
+elif [ "$ARGOCD_LOGIN_STATUS" = "400" ]; then
+    fail "ArgoCD OIDC login returns 400 - invalid redirect URL configuration"
+else
+    fail "ArgoCD OIDC login unexpected response (HTTP $ARGOCD_LOGIN_STATUS)"
+fi
+
+section "Grafana OIDC Integration"
+
+# Check Grafana redirects to OAuth login
+GRAFANA_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://grafana.lab.axiomlayer.com/login" 2>/dev/null)
+if [ "$GRAFANA_STATUS" = "200" ] || [ "$GRAFANA_STATUS" = "302" ]; then
+    pass "Grafana login page accessible (HTTP $GRAFANA_STATUS)"
+else
+    fail "Grafana login page not accessible (HTTP $GRAFANA_STATUS)"
+fi
+
+# Check Grafana OAuth endpoint redirects to Authentik
+GRAFANA_OAUTH=$(curl -sk -I "https://grafana.lab.axiomlayer.com/login/generic_oauth" 2>/dev/null | grep -i "location:" | head -1)
+if echo "$GRAFANA_OAUTH" | grep -q "auth.lab.axiomlayer.com"; then
+    pass "Grafana OAuth redirects to Authentik"
+else
+    fail "Grafana OAuth does not redirect to Authentik"
+fi
+
+# Verify Grafana has OAuth configured
+GRAFANA_CONFIG=$(kubectl get deployment -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].spec.template.spec.containers[0].env}' 2>/dev/null)
+if echo "$GRAFANA_CONFIG" | grep -q "GF_AUTH_GENERIC_OAUTH_ENABLED"; then
+    pass "Grafana OAuth environment variables configured"
+else
+    # Check via values/configmap
+    GRAFANA_INI=$(kubectl get configmap -n monitoring -l app.kubernetes.io/name=grafana -o yaml 2>/dev/null | grep -i "generic_oauth")
+    if [ -n "$GRAFANA_INI" ]; then
+        pass "Grafana OAuth configured via ConfigMap"
+    else
+        fail "Grafana OAuth not configured"
+    fi
+fi
+
+section "Outline Login Integration"
+
+# Outline uses forward auth - check it redirects to Authentik
+OUTLINE_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://docs.lab.axiomlayer.com/" 2>/dev/null)
+if [ "$OUTLINE_STATUS" = "302" ]; then
+    pass "Outline returns redirect (HTTP 302)"
+else
+    fail "Outline should redirect to auth (got HTTP $OUTLINE_STATUS)"
+fi
+
+# Check Outline redirects to Authentik (via forward auth outpost)
+OUTLINE_REDIRECT=$(curl -sk -I "https://docs.lab.axiomlayer.com/" 2>/dev/null | grep -i "location:" | head -1)
+if echo "$OUTLINE_REDIRECT" | grep -q "auth.lab.axiomlayer.com"; then
+    pass "Outline redirects to Authentik for login"
+else
+    fail "Outline does not redirect to Authentik (redirect: $OUTLINE_REDIRECT)"
+fi
+
+# Check Outline provider exists in Authentik outpost
+OUTPOST_PROVIDERS=$(kubectl logs -n authentik deploy/ak-outpost-forward-auth-outpost --tail=100 2>/dev/null | grep -c "docs.lab.axiomlayer.com" || true)
+if [ -n "$OUTPOST_PROVIDERS" ] && [ "$OUTPOST_PROVIDERS" -gt 0 ]; then
+    pass "Outline provider loaded in forward auth outpost"
+else
+    fail "Outline provider not found in forward auth outpost"
+fi
+
+# Verify Outline ingress has forward auth middleware
+OUTLINE_MIDDLEWARE=$(kubectl get ingress outline -n outline -o jsonpath='{.metadata.annotations}' 2>/dev/null | grep -o "authentik.*@kubernetescrd")
+if [ -n "$OUTLINE_MIDDLEWARE" ]; then
+    pass "Outline ingress has forward auth middleware configured"
+else
+    fail "Outline ingress missing forward auth middleware"
 fi
 
 section "Summary"
