@@ -10,8 +10,8 @@ data:
   url: https://argocd.lab.axiomlayer.com
   oidc.config: |
     name: Authentik
-    issuer: https://auth.lab.axiomlayer.com/application/o/argo-cd/
-    clientID: iaGtb1GzmpQZ3ZpawkveUORRu5xnsyUl6hxEsXVH
+    issuer: https://auth.lab.axiomlayer.com/application/o/argocd/
+    clientID: argocd
     clientSecret: $oidc.authentik.clientSecret
     requestedScopes: ["openid", "profile", "email"]
 ---

@@ -25,6 +25,21 @@ entries:
       is_superuser: false
 
   # ===================
+  # Users
+  # ===================
+  - model: authentik_core.user
+    id: user-jasen
+    identifiers:
+      username: jasen
+    attrs:
+      name: Jasen
+      email: jasen@axiomlayer.com
+      is_active: true
+      groups:
+        - !KeyOf group-admins
+        - !KeyOf group-users
+
+  # ===================
   # Scope Mappings (for OIDC)
   # ===================
   - model: authentik_providers_oauth2.scopemapping
@@ -117,6 +132,25 @@ entries:
       sub_mode: user_email
       signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
 
+  - model: authentik_providers_oauth2.oauth2provider
+    id: provider-plane
+    identifiers:
+      name: Plane OIDC Provider
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      client_type: confidential
+      client_id: plane
+      # client_secret managed separately via sealed secret
+      redirect_uris:
+        - matching_mode: strict
+          url: https://plane.lab.axiomlayer.com/auth/oidc/callback/
+      access_token_validity: hours=1
+      refresh_token_validity: days=30
+      include_claims_in_id_token: true
+      sub_mode: user_email
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
   # ===================
   # Outpost (Forward Auth)
   # ===================
@@ -192,7 +226,7 @@ entries:
       slug: plane
     attrs:
       name: Plane
-      provider: !KeyOf provider-forward-auth
+      provider: !KeyOf provider-plane
       meta_launch_url: https://plane.lab.axiomlayer.com
       meta_icon: https://plane.so/favicon.ico
       meta_description: Project management and issue tracking
@@ -222,6 +256,32 @@ entries:
       meta_launch_url: https://autom8.lab.axiomlayer.com
       meta_icon: https://n8n.io/favicon.ico
       meta_description: Workflow automation platform
+      policy_engine_mode: any
+      group: Applications
+
+  - model: authentik_core.application
+    id: app-open-webui
+    identifiers:
+      slug: open-webui
+    attrs:
+      name: Open WebUI
+      provider: !KeyOf provider-forward-auth
+      meta_launch_url: https://ai.lab.axiomlayer.com
+      meta_icon: https://openwebui.com/favicon.png
+      meta_description: AI chat interface
+      policy_engine_mode: any
+      group: Applications
+
+  - model: authentik_core.application
+    id: app-campfire
+    identifiers:
+      slug: campfire
+    attrs:
+      name: Campfire
+      provider: !KeyOf provider-forward-auth
+      meta_launch_url: https://chat.lab.axiomlayer.com
+      meta_icon: https://cdn-icons-png.flaticon.com/512/2991/2991148.png
+      meta_description: Team chat and communication
       policy_engine_mode: any
       group: Applications
 
