@@ -431,3 +431,42 @@ entries:
     attrs:
       enabled: true
       timeout: 30
+
+  # ===================
+  # Policy Bindings - Outline (All users)
+  # ===================
+  - model: authentik_policies.policybinding
+    id: binding-outline-user
+    identifiers:
+      order: 0
+      target: !KeyOf app-outline
+      policy: !KeyOf policy-is-user
+    attrs:
+      enabled: true
+      timeout: 30
+
+  # ===================
+  # Policy Bindings - Grafana (All users)
+  # ===================
+  - model: authentik_policies.policybinding
+    id: binding-grafana-user
+    identifiers:
+      order: 0
+      target: !KeyOf app-grafana
+      policy: !KeyOf policy-is-user
+    attrs:
+      enabled: true
+      timeout: 30
+
+  # ===================
+  # Policy Bindings - Plane (All users)
+  # ===================
+  - model: authentik_policies.policybinding
+    id: binding-plane-user
+    identifiers:
+      order: 0
+      target: !KeyOf app-plane
+      policy: !KeyOf policy-is-user
+    attrs:
+      enabled: true
+      timeout: 30
