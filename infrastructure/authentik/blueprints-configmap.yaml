@@ -59,6 +59,7 @@ data:
           name: Dashboard Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://db.lab.axiomlayer.com
 
@@ -68,6 +69,7 @@ data:
           name: n8n Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://autom8.lab.axiomlayer.com
 
@@ -77,6 +79,7 @@ data:
           name: Open WebUI Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://ai.lab.axiomlayer.com
 
@@ -86,6 +89,7 @@ data:
           name: Campfire Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://chat.lab.axiomlayer.com
 
@@ -95,6 +99,7 @@ data:
           name: Alertmanager Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://alerts.lab.axiomlayer.com
 
@@ -104,6 +109,7 @@ data:
           name: Longhorn Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://longhorn.lab.axiomlayer.com
 
@@ -113,6 +119,7 @@ data:
           name: Telnet Server Proxy Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           mode: forward_single
           external_host: https://telnet.lab.axiomlayer.com
 

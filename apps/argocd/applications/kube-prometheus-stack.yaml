@@ -14,6 +14,15 @@ spec:
     helm:
       values: |
         grafana:
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - grafana.lab.axiomlayer.com
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - grafana.lab.axiomlayer.com
           additionalDataSources:
             - name: Loki
               type: loki
