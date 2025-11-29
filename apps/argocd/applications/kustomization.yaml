@@ -13,6 +13,7 @@ resources:
   - dashboard.yaml
   - external-dns.yaml
   - kube-prometheus-stack.yaml
+  - monitoring-extras.yaml
   - longhorn.yaml
   - longhorn-helm.yaml
   - loki.yaml
