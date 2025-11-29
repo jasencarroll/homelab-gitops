@@ -69,6 +69,7 @@ FORWARD_AUTH_APPS=(
     "longhorn.lab.axiomlayer.com:Longhorn"
     "ai.lab.axiomlayer.com:OpenWebUI"
     "chat.lab.axiomlayer.com:Campfire"
+    "docs.lab.axiomlayer.com:Outline"
 )
 
 for app in "${FORWARD_AUTH_APPS[@]}"; do
@@ -97,7 +98,6 @@ HTTPS_APPS=(
     "plane.lab.axiomlayer.com:Plane"
     "grafana.lab.axiomlayer.com:Grafana"
     "argocd.lab.axiomlayer.com:ArgoCD"
-    "docs.lab.axiomlayer.com:Outline"
 )
 
 for app in "${HTTPS_APPS[@]}"; do
@@ -229,41 +229,6 @@ else
     else
         fail "Grafana OAuth not configured"
     fi
-fi
-
-section "Outline OIDC Integration"
-
-# Outline uses native OIDC - check it's accessible
-OUTLINE_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://docs.lab.axiomlayer.com/" 2>/dev/null)
-if [ "$OUTLINE_STATUS" = "200" ] || [ "$OUTLINE_STATUS" = "302" ]; then
-    pass "Outline is accessible (HTTP $OUTLINE_STATUS)"
-else
-    fail "Outline not accessible (got HTTP $OUTLINE_STATUS)"
-fi
-
-# Check Outline OIDC provider exists in Authentik
-OIDC_DISCOVERY=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/outline/.well-known/openid-configuration" 2>/dev/null)
-if echo "$OIDC_DISCOVERY" | grep -q "issuer"; then
-    pass "Outline OIDC provider discovery endpoint working"
-else
-    fail "Outline OIDC provider discovery endpoint not found"
-fi
-
-# Check Outline has OIDC configured in deployment
-OUTLINE_OIDC=$(kubectl get deployment outline -n outline -o yaml 2>/dev/null | grep -c "OIDC_CLIENT_ID" || true)
-if [ -n "$OUTLINE_OIDC" ] && [ "$OUTLINE_OIDC" -gt 0 ]; then
-    pass "Outline deployment has OIDC configuration"
-else
-    fail "Outline deployment missing OIDC configuration"
-fi
-
-# Verify Outline login page shows OIDC option
-OUTLINE_PAGE=$(curl -sk "https://docs.lab.axiomlayer.com/" 2>/dev/null)
-if echo "$OUTLINE_PAGE" | grep -qi "authentik\|oidc\|login\|sign.in"; then
-    pass "Outline shows login option"
-else
-    # If Outline shows the app directly, user might be logged in or OIDC is configured
-    pass "Outline page accessible (may require login)"
 fi
 
 section "Summary"
