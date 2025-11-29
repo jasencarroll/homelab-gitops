@@ -1,21 +1,20 @@
 #!/bin/bash
 set -e
 
-# Panther Server Provisioning Script
-# Combines k3s-server security hardening with panther-dotfiles terminal experience
+# Panther Agent Provisioning Script
+# Combines k3s-agent security hardening with panther-dotfiles terminal experience
 #
-# Run as: sudo ./provision-panther-server.sh <username> [--init|--join <server-ip>]
+# Run as: sudo ./provision-panther-agent.sh <username> --join <server-ip>
 #
-# First server:  sudo ./provision-panther-server.sh jasen --init
-# Second server: sudo ./provision-panther-server.sh jasen --join <first-server-tailscale-ip>
+# Usage: sudo ./provision-panther-agent.sh jasen --join <server-tailscale-ip>
 
 USERNAME=${1:-jasen}
-MODE=${2:---init}
+MODE=${2:---join}
 JOIN_IP=${3:-}
 SSH_PORT=22879
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "=== Panther Server Provisioning for user: $USERNAME ==="
+echo "=== Panther Agent Provisioning for user: $USERNAME ==="
 
 # ============================================
 # 0. Cleanup Previous Botched Installs
@@ -639,9 +638,9 @@ sed -i 's/#HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=ignore/'
 sed -i 's/#HandleLidSwitchDocked=.*/HandleLidSwitchDocked=ignore/' /etc/systemd/logind.conf
 
 # ============================================
-# 12. K3s Installation
+# 12. K3s Agent Installation
 # ============================================
-echo "=== Installing K3s ==="
+echo "=== Installing K3s Agent ==="
 
 # Get Tailscale IP for node communication
 TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "")
@@ -651,57 +650,38 @@ if [ -z "$TAILSCALE_IP" ]; then
   exit 1
 fi
 
-K3S_ARGS="--node-ip=$TAILSCALE_IP --advertise-address=$TAILSCALE_IP --flannel-iface=tailscale0"
-
-if [ "$MODE" == "--init" ]; then
-  echo "=== Initializing first K3s server node ==="
-  curl -sfL https://get.k3s.io | sh -s - server \
-    --cluster-init \
-    $K3S_ARGS
-
-  # Wait for K3s to be ready
-  sleep 10
-
-  # Get join token
-  echo ""
-  echo "=== K3s Server Initialized ==="
-  echo "Join token for additional servers:"
-  cat /var/lib/rancher/k3s/server/node-token
-  echo ""
-  echo "Join command for next server:"
-  echo "sudo ./provision-panther-server.sh <username> --join $TAILSCALE_IP"
-
-elif [ "$MODE" == "--join" ]; then
-  if [ -z "$JOIN_IP" ]; then
-    echo "ERROR: Must provide server IP to join"
-    echo "Usage: sudo ./provision-panther-server.sh <username> --join <server-tailscale-ip>"
-    exit 1
-  fi
-
-  echo "=== Joining K3s cluster at $JOIN_IP ==="
-  echo "Enter the join token from the first server:"
-  read -r K3S_TOKEN
-
-  curl -sfL https://get.k3s.io | K3S_TOKEN="$K3S_TOKEN" sh -s - server \
-    --server https://$JOIN_IP:6443 \
-    $K3S_ARGS
+if [ "$MODE" != "--join" ] || [ -z "$JOIN_IP" ]; then
+  echo "ERROR: Must provide server IP to join"
+  echo "Usage: sudo ./provision-panther-agent.sh <username> --join <server-tailscale-ip>"
+  exit 1
 fi
 
-# Setup kubectl for user
+echo "=== Joining K3s cluster at $JOIN_IP as agent ==="
+echo "Enter the join token from the server:"
+read -r K3S_TOKEN
+
+K3S_ARGS="--node-ip=$TAILSCALE_IP --flannel-iface=tailscale0"
+
+curl -sfL https://get.k3s.io | K3S_TOKEN="$K3S_TOKEN" K3S_URL="https://$JOIN_IP:6443" sh -s - agent \
+  $K3S_ARGS
+
+# Setup kubectl for user (copy from server)
 mkdir -p $USER_HOME/.kube
-cp /etc/rancher/k3s/k3s.yaml $USER_HOME/.kube/config
-sed -i "s/127.0.0.1/$TAILSCALE_IP/g" $USER_HOME/.kube/config
+echo ""
+echo "To use kubectl from this agent, copy the kubeconfig from the server:"
+echo "  scp -P 22879 <server>:/etc/rancher/k3s/k3s.yaml $USER_HOME/.kube/config"
+echo "  sed -i 's/127.0.0.1/$JOIN_IP/g' $USER_HOME/.kube/config"
 chown -R $USERNAME:$USERNAME $USER_HOME/.kube
 
 echo ""
 echo "=========================================="
-echo "  Panther Server Provisioning Complete"
+echo "  Panther Agent Provisioning Complete"
 echo "=========================================="
 echo ""
 echo "SSH Port:     $SSH_PORT"
 echo "Shell:        zsh + starship + oh-my-zsh"
 echo "Tailscale IP: $TAILSCALE_IP"
-echo "K3s:          installed and running"
+echo "K3s Agent:    joined cluster at $JOIN_IP"
 echo ""
 echo "Features:"
 echo "  - SSH hardened (key-only, non-standard port)"
@@ -710,7 +690,7 @@ echo "  - Modern CLI: eza, bat, fzf, ripgrep"
 echo "  - k9s, lazydocker, btop"
 echo "  - Tokyo Night theme everywhere"
 echo ""
-echo "Test with: kubectl get nodes"
+echo "Verify node joined: kubectl get nodes (from server)"
 echo ""
 echo "NOTE: SSH is now on port $SSH_PORT"
 echo "      Reconnect with: ssh -p $SSH_PORT $USERNAME@$TAILSCALE_IP"
