@@ -148,7 +148,7 @@ data:
       - model: authentik_providers_oauth2.oauth2provider
         id: provider-grafana
         identifiers:
-          name: Grafana OIDC Provider
+          name: Grafana OAuth2 Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
@@ -164,15 +164,24 @@ data:
           sub_mode: user_email
           signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
 
-      - model: authentik_providers_proxy.proxyprovider
+      - model: authentik_providers_oauth2.oauth2provider
         id: provider-outline
         identifiers:
-          name: Outline Proxy Provider
+          name: Outline OIDC Provider
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
-          mode: forward_single
-          external_host: https://docs.lab.axiomlayer.com
+          client_type: confidential
+          client_id: outline
+          client_secret: "585d48f4a5e90c66d467c581766f05c13c7fa440e5172b95a144a6bdac232c6b"
+          redirect_uris:
+            - matching_mode: strict
+              url: https://docs.lab.axiomlayer.com/auth/oidc.callback
+          access_token_validity: hours=1
+          refresh_token_validity: days=30
+          include_claims_in_id_token: true
+          sub_mode: user_email
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
 
       - model: authentik_providers_oauth2.oauth2provider
         id: provider-plane
@@ -222,7 +231,6 @@ data:
             - !KeyOf provider-alertmanager
             - !KeyOf provider-longhorn
             - !KeyOf provider-telnet
-            - !KeyOf provider-outline
           config:
             authentik_host: https://auth.lab.axiomlayer.com
             docker_labels: null

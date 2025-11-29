@@ -69,7 +69,6 @@ FORWARD_AUTH_APPS=(
     "longhorn.lab.axiomlayer.com:Longhorn"
     "ai.lab.axiomlayer.com:OpenWebUI"
     "chat.lab.axiomlayer.com:Campfire"
-    "docs.lab.axiomlayer.com:Outline"
 )
 
 for app in "${FORWARD_AUTH_APPS[@]}"; do
@@ -121,6 +120,7 @@ OIDC_APPS=(
     "argocd.lab.axiomlayer.com:ArgoCD"
     "grafana.lab.axiomlayer.com:Grafana"
     "plane.lab.axiomlayer.com:Plane"
+    "docs.lab.axiomlayer.com:Outline"
 )
 
 for app in "${OIDC_APPS[@]}"; do
@@ -142,6 +142,7 @@ OIDC_PROVIDERS=(
     "argocd:ArgoCD"
     "grafana:Grafana"
     "plane:Plane"
+    "outline:Outline"
 )
 
 for provider in "${OIDC_PROVIDERS[@]}"; do
