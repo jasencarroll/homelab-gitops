@@ -170,6 +170,16 @@ if [ -z "$TAILSCALE_IP" ]; then
   exit 1
 fi
 
+# Clean up any existing k3s installation to prevent stale CA cert issues
+if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
+  echo "=== Cleaning up existing K3s installation ==="
+  /usr/local/bin/k3s-uninstall.sh || true
+fi
+
+# Also remove any leftover data directories
+rm -rf /var/lib/rancher/k3s
+rm -rf /etc/rancher/k3s
+
 K3S_ARGS="--node-ip=$TAILSCALE_IP --advertise-address=$TAILSCALE_IP --flannel-iface=tailscale0"
 
 if [ "$MODE" == "--init" ]; then
@@ -177,10 +187,10 @@ if [ "$MODE" == "--init" ]; then
   curl -sfL https://get.k3s.io | sh -s - server \
     --cluster-init \
     $K3S_ARGS
-  
+
   # Wait for K3s to be ready
   sleep 10
-  
+
   # Get join token
   echo ""
   echo "=== K3s Server Initialized ==="
@@ -189,18 +199,18 @@ if [ "$MODE" == "--init" ]; then
   echo ""
   echo "Join command for next server:"
   echo "sudo ./provision-k3s-server.sh <username> --join $TAILSCALE_IP"
-  
+
 elif [ "$MODE" == "--join" ]; then
   if [ -z "$JOIN_IP" ]; then
     echo "ERROR: Must provide server IP to join"
     echo "Usage: sudo ./provision-k3s-server.sh <username> --join <server-tailscale-ip>"
     exit 1
   fi
-  
+
   echo "=== Joining K3s cluster at $JOIN_IP ==="
   echo "Enter the join token from the first server:"
   read -r K3S_TOKEN
-  
+
   curl -sfL https://get.k3s.io | K3S_TOKEN="$K3S_TOKEN" sh -s - server \
     --server https://$JOIN_IP:6443 \
     $K3S_ARGS
