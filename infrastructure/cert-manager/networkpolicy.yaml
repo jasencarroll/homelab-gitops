@@ -93,7 +93,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # Allow Kubernetes API server to call the webhook
+    # Allow Kubernetes API server to call the webhook (10250 is the actual container port)
     - ports:
         - protocol: TCP
-          port: 443
+          port: 10250
