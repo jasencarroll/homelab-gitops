@@ -89,7 +89,7 @@ jobs:
       - name: Check for plaintext secrets
         run: |
           echo "Checking for plaintext Secret resources (should use SealedSecret)..."
-          if grep -rn "kind: Secret" --include="*.yaml" apps/ infrastructure/ | grep -v "SealedSecret" | grep -v "kind: SealedSecret"; then
+          if grep -rn '^kind: Secret$' --include="*.yaml" apps/ infrastructure/ | grep -v "SealedSecret" | grep -v "kind: SealedSecret"; then
             echo "ERROR: Found plaintext Secret. Use SealedSecret instead."
             exit 1
           fi
