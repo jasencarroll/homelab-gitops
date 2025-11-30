@@ -24,7 +24,7 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/arch: amd64
-        kubernetes.io/hostname: panther
+        kubernetes.io/hostname: neko
       imagePullSecrets:
         - name: ghcr-pull-secret
       securityContext:
