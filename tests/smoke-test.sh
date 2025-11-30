@@ -508,15 +508,19 @@ done
 
 section "DNS Resolution"
 
-# Test internal DNS resolution
-DNS_TEST=$(kubectl run dns-test --image=busybox:1.36 --rm -i --restart=Never --timeout=30s -- nslookup kubernetes.default.svc.cluster.local 2>/dev/null | grep -c "Address" || true)
-DNS_TEST="${DNS_TEST:-0}"
-# Ensure DNS_TEST is a single integer
-DNS_TEST=$(echo "$DNS_TEST" | head -1 | tr -d '[:space:]')
-if [ -n "$DNS_TEST" ] && [ "$DNS_TEST" -gt 0 ] 2>/dev/null; then
-    pass "Internal DNS resolution working"
+# Check CoreDNS pods are running and ready
+DNS_READY=$(kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null | tr ' ' '\n' | grep -c "True" || echo "0")
+DNS_TOTAL=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers 2>/dev/null | wc -l | tr -d '[:space:]')
+DNS_READY=$(echo "$DNS_READY" | head -1 | tr -d '[:space:]')
+DNS_READY="${DNS_READY:-0}"
+DNS_TOTAL="${DNS_TOTAL:-0}"
+
+if [ "$DNS_READY" -gt 0 ] && [ "$DNS_READY" -eq "$DNS_TOTAL" ] 2>/dev/null; then
+    pass "CoreDNS running ($DNS_READY/$DNS_TOTAL pods ready)"
+elif [ "$DNS_READY" -gt 0 ] 2>/dev/null; then
+    warn "CoreDNS degraded ($DNS_READY/$DNS_TOTAL pods ready)"
 else
-    warn "Internal DNS test inconclusive"
+    fail "CoreDNS not running"
 fi
 
 section "Endpoint Health Checks"
