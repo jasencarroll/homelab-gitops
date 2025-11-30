@@ -42,15 +42,15 @@ homelab-gitops/
 │   ├── cert-manager/         # TLS certificates
 │   ├── cloudnative-pg/       # PostgreSQL operator
 │   ├── external-dns/         # DNS management (Cloudflare)
-│   ├── grafana/              # Grafana extras (OIDC config)
 │   ├── longhorn/             # Distributed storage
-│   ├── monitoring/           # Prometheus extras
+│   ├── monitoring/           # Prometheus/Grafana extras (OIDC, certs)
 │   ├── nfs-proxy/            # NFS access for Longhorn
-│   └── open-webui/           # AI chat interface
+│   ├── open-webui/           # AI chat interface
+│   └── sealed-secrets/       # Sealed Secrets controller
 ├── tests/                    # Test suite
 │   ├── smoke-test.sh         # Infrastructure health (29 tests)
 │   ├── test-auth.sh          # Authentication flows (14 tests)
-│   └── validate-manifests.sh # Kustomize validation (17 checks)
+│   └── validate-manifests.sh # Kustomize validation (20 checks)
 ├── scripts/                  # Provisioning scripts
 │   └── provision-k3s-server.sh
 ├── .env                      # Secrets for sealed secrets (not committed)
@@ -248,11 +248,16 @@ For backup jobs or cross-namespace access, add network policy rules:
 
 **Use Sealed Secrets only** - no plaintext secrets in Git.
 
+The Sealed Secrets controller runs in `kube-system` namespace and is now GitOps-managed via `infrastructure/sealed-secrets/`.
+
 ```bash
 # Create sealed secret
 kubectl create secret generic {name} -n {namespace} \
   --from-literal=key=value --dry-run=client -o yaml | \
   kubeseal --format yaml > sealed-secret.yaml
+
+# Fetch public key (for offline sealing)
+kubeseal --fetch-cert > sealed-secrets-pub.pem
 ```
 
 ### .env File Variables
@@ -443,7 +448,10 @@ Full documentation in Outline at https://docs.lab.axiomlayer.com:
 - ArgoCD excluded from self-management to prevent loops
 - Helm charts (Authentik, Longhorn, kube-prometheus-stack, cert-manager, actions-runner-controller) installed via ArgoCD Helm source
 - TLS termination at Traefik; internal services use HTTP
-- Ollama runs on siberian (GPU workstation) via Tailscale at 100.92.105.59:11434
+- Ollama for LLM generation runs on siberian (GPU workstation, RTX 5070 Ti) via Tailscale at 100.115.3.88:11434
+- Ollama for embeddings runs on panther (RTX 3050 Ti) via Tailscale at 100.79.124.94:11434
+- Open WebUI uses granite4:3b model for RAG embeddings
 - GitHub Actions runners have read-only cluster RBAC for tests
 - Backup jobs run on neko node (nodeSelector for NFS access)
 - panther is the primary worker node for most workloads
+- Sealed Secrets controller is GitOps-managed in infrastructure/sealed-secrets/
