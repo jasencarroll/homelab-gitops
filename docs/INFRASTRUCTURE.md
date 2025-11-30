@@ -387,17 +387,18 @@ kubectl rollout restart deployment/ak-outpost-forward-auth-outpost -n authentik
 | URL | https://argocd.lab.axiomlayer.com |
 | Repo | github.com/jasencdev/axiomlayer |
 | Branch | main |
+| Auth | Dex OIDC → Authentik |
 
 ### Components
 
 | Component | Purpose | Replicas |
 |-----------|---------|----------|
-| argocd-server | Web UI and API | 1 |
-| argocd-application-controller | Sync engine | 1 |
-| argocd-repo-server | Git operations | 1 |
+| argocd-server | Web UI and API | 2 |
+| argocd-application-controller | Sync engine | 2 |
+| argocd-repo-server | Git operations | 2 |
 | argocd-redis | Cache | 1 |
-| argocd-dex-server | OIDC (optional) | 1 |
-| argocd-applicationset-controller | ApplicationSets | 1 |
+| argocd-dex-server | OIDC via Authentik | 2 |
+| argocd-applicationset-controller | ApplicationSets | 2 |
 | argocd-notifications-controller | Notifications | 1 |
 
 ### App of Apps
@@ -435,10 +436,22 @@ data:
   server.insecure: "true"
 ```
 
-### Single Sign-On
+### Single Sign-On (Dex OIDC)
 
-- `apps/argocd/sealed-secret.yaml` stores the Authentik OIDC client secret under `oidc.authentik.clientSecret`.
-- `apps/argocd/ingress.yaml` attaches the same forward-auth middleware used by every other ingress plus the Authentik OIDC settings so users log in with their SSO account instead of the local admin.
+ArgoCD uses Dex as an OIDC intermediary that connects to Authentik:
+
+```
+User → ArgoCD Login → Dex (/api/dex/auth) → Authentik → Back to ArgoCD
+```
+
+**Configuration:**
+- Dex config is in `configs.cm.dex.config` within the Helm values
+- Callback URL: `https://argocd.lab.axiomlayer.com/api/dex/callback`
+- Authentik issuer: `https://auth.lab.axiomlayer.com/application/o/argocd/`
+
+**Secrets:**
+- `apps/argocd/sealed-secret.yaml` stores the Authentik OIDC client secret under `oidc.authentik.clientSecret`
+- Dex references this via `$oidc.authentik.clientSecret` in the connector config
 
 ### Commands
 
@@ -483,25 +496,25 @@ kubectl get secret argocd-initial-admin-secret -n argocd \
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      Longhorn System                                 │
 │                                                                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │   Manager    │  │   Manager    │  │   Manager    │              │
-│  │   (neko)     │  │   (neko2)    │  │   (bobcat)   │              │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘              │
-│         │                 │                 │                       │
-│         └─────────────────┼─────────────────┘                       │
-│                           │                                         │
-│                    ┌──────▼──────┐                                  │
-│                    │   Volume    │                                  │
-│                    │  (3 replicas)│                                  │
-│                    └──────┬──────┘                                  │
-│                           │                                         │
-│         ┌─────────────────┼─────────────────┐                       │
-│         ▼                 ▼                 ▼                       │
-│    ┌─────────┐       ┌─────────┐       ┌─────────┐                 │
-│    │ Replica │       │ Replica │       │ Replica │                 │
-│    │ (neko)  │       │ (neko2) │       │ (bobcat)│                 │
-│    └─────────┘       └─────────┘       └─────────┘                 │
-│                                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│  │ Manager  │  │ Manager  │  │ Manager  │  │ Manager  │            │
+│  │ (neko)   │  │ (neko2)  │  │ (panther)│  │ (bobcat) │            │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘            │
+│       │             │             │             │                   │
+│       └─────────────┴──────┬──────┴─────────────┘                   │
+│                            │                                        │
+│                     ┌──────▼──────┐                                 │
+│                     │   Volume    │                                 │
+│                     │ (3 replicas)│                                 │
+│                     └──────┬──────┘                                 │
+│                            │                                        │
+│    ┌───────────────────────┼───────────────────────┐               │
+│    ▼           ▼                      ▼            ▼               │
+│ ┌───────┐  ┌───────┐            ┌───────┐    ┌───────┐            │
+│ │Replica│  │Replica│            │Replica│    │Replica│            │
+│ │(neko) │  │(neko2)│            │(panther)   │(bobcat)│           │
+│ └───────┘  └───────┘            └───────┘    └───────┘            │
+│                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

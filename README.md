@@ -3,7 +3,7 @@
 GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 
 - **Domain**: `*.lab.axiomlayer.com`
-- **Cluster**: 3-node K3s over Tailscale mesh
+- **Cluster**: 4-node K3s v1.33.6 over Tailscale mesh (2 control-plane, 2 workers)
 - **CI/CD**: Self-hosted GitHub Actions runners (`jasencdev` org)
 - **Repository**: `jasencdev/axiomlayer`
 
@@ -36,13 +36,15 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 |------|------|--------------|----------|---------|
 | neko | control-plane | 100.67.134.110 | 192.168.1.167 | 462GB NVMe |
 | neko2 | control-plane | 100.106.35.14 | 192.168.1.103 | 462GB NVMe |
-| bobcat | agent (Raspberry Pi) | 100.121.67.60 | 192.168.1.49 | 500GB SSD |
+| panther | agent | 100.79.124.94 | 192.168.1.x | 1TB SSD |
+| bobcat | agent (Raspberry Pi 5) | 100.121.67.60 | 192.168.1.49 | 512GB NVMe |
 
-### GPU Workstation
+### GPU Resources
 
 | Node | Role | GPU | VRAM | Purpose |
 |------|------|-----|------|---------|
-| siberian | Ollama server | NVIDIA RTX 5070 Ti | 16GB | Local LLM inference |
+| siberian | Ollama (generation) | NVIDIA RTX 5070 Ti | 16GB | LLM chat inference |
+| panther | Ollama (embeddings) | NVIDIA RTX 3050 Ti | 4GB | RAG embeddings |
 
 ### Technology Stack
 

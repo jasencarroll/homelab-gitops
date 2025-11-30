@@ -21,13 +21,15 @@ This document provides a comprehensive technical overview of the homelab Kuberne
 |------|------|----------|-----|-----|---------|--------------|----------|
 | neko | control-plane, etcd, master | Mini PC | AMD Ryzen | 32GB | 462GB NVMe | 100.67.134.110 | 192.168.1.167 |
 | neko2 | control-plane, etcd, master | Mini PC | AMD Ryzen | 32GB | 462GB NVMe | 100.106.35.14 | 192.168.1.103 |
-| bobcat | agent | Raspberry Pi 5 | ARM64 | 8GB | 500GB SSD | 100.121.67.60 | 192.168.1.49 |
+| panther | agent | Desktop | Intel | 32GB | 1TB SSD | 100.79.124.94 | 192.168.1.x |
+| bobcat | agent | Raspberry Pi 5 + M.2 HAT | ARM64 | 8GB | 512GB NVMe | 100.121.67.60 | 192.168.1.49 |
 
 ### External Resources
 
 | Resource | Purpose | Location | Connection |
 |----------|---------|----------|------------|
-| siberian | GPU workstation (Ollama) | Local network | Tailscale mesh |
+| siberian | GPU workstation (Ollama generation) | Local network | Tailscale mesh |
+| panther | Ollama embeddings (RTX 3050 Ti) | Cluster node | Tailscale mesh |
 | UniFi NAS | Backup storage | 192.168.1.234 | NFS via proxy |
 
 ### Kubernetes Version
@@ -125,13 +127,13 @@ K3s includes ServiceLB (formerly Klipper), which:
 │                    (longhorn-system namespace)                       │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
-                ┌───────────────┼───────────────┐
-                ▼               ▼               ▼
-         ┌──────────┐    ┌──────────┐    ┌──────────┐
-         │   neko   │    │   neko2  │    │  bobcat  │
-         │ 462GB    │    │ 462GB    │    │ 500GB    │
-         │ NVMe     │    │ NVMe     │    │ SSD      │
-         └──────────┘    └──────────┘    └──────────┘
+    ┌───────────────────────────┼───────────────────────────┐
+    ▼               ▼                      ▼                ▼
+┌──────────┐  ┌──────────┐           ┌──────────┐    ┌──────────┐
+│   neko   │  │   neko2  │           │  panther │    │  bobcat  │
+│ 462GB    │  │ 462GB    │           │ 1TB      │    │ 512GB    │
+│ NVMe     │  │ NVMe     │           │ SSD      │    │ NVMe     │
+└──────────┘  └──────────┘           └──────────┘    └──────────┘
 ```
 
 ### Volume Inventory
@@ -419,13 +421,13 @@ Current PostgreSQL topology:
     ┌───────────────┼───────────────┬───────────────┬────────────────────┐│
     │               │               │               │                    ││
     ▼               ▼               ▼               ▼                    ││
-┌───────┐      ┌───────┐      ┌───────┐      ┌──────────┐               ││
-│ neko  │      │ neko2 │      │bobcat │      │ siberian │               ││
-│control│◄────▶│control│◄────▶│ agent │      │  (GPU)   │               ││
-│ plane │      │ plane │      │ (Pi5) │      │  Ollama  │               ││
-└───┬───┘      └───┬───┘      └───┬───┘      └────┬─────┘               ││
-    │              │              │               │                      ││
-    └──────────────┴──────────────┴───────────────┘                      ││
+┌───────┐      ┌───────┐      ┌───────┐      ┌───────┐      ┌──────────┐││
+│ neko  │      │ neko2 │      │panther│      │bobcat │      │ siberian │││
+│control│◄────▶│control│◄────▶│ agent │◄────▶│ agent │      │  (GPU)   │││
+│ plane │      │ plane │      │ (GPU) │      │ (Pi5) │      │  Ollama  │││
+└───┬───┘      └───┬───┘      └───┬───┘      └───┬───┘      └────┬─────┘││
+    │              │              │              │                │      ││
+    └──────────────┴──────────────┴──────────────┴────────────────┘      ││
                     │                                                     ││
          ┌──────────┴──────────┐                                         ││
          │    K3s Cluster      │                                         ││
@@ -446,8 +448,8 @@ Current PostgreSQL topology:
          │  │ │Plane    │  │   │                                         ││
          │  │ │Outline  │  │   │                                         ││
          │  │ │n8n      │  │   │                                         ││
-         │  │ │Open WebUI│─┼───┼─────────────────────────────────────────┘│
-         │  │ │...      │  │   │                                          │
+         │  │ │Open WebUI│─┼───┼─────────────(siberian: generation)──────┘│
+         │  │ │...      │  │   │             (panther: embeddings)        │
          │  │ └─────────┘  │   │                                          │
          │  └──────────────┘   │                                          │
          │         │           │                                          │

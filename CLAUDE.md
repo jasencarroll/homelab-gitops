@@ -15,11 +15,9 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, observability, and automated b
 |------|------|--------------|---------|
 | neko | control-plane, etcd, master | 100.67.134.110 | K3s server (primary) |
 | neko2 | control-plane, etcd, master | 100.106.35.14 | K3s server (HA) |
-| panther | worker | 100.79.124.94 | K3s agent (main workloads) |
-| bobcat | worker | 100.121.67.60 | K3s agent (Raspberry Pi) |
-| siberian | external | - | GPU workstation (Ollama) |
-
-**Note**: The old node names (leopard, bobcat, lynx) in documentation are outdated. Current nodes are neko, neko2, panther, bobcat.
+| panther | worker | 100.79.124.94 | K3s agent (main workloads, RTX 3050 Ti for embeddings) |
+| bobcat | worker | 100.121.67.60 | K3s agent (Raspberry Pi 5 + M.2 NVMe HAT) |
+| siberian | external | - | GPU workstation (Ollama generation, RTX 5070 Ti) |
 
 ## Structure
 
@@ -48,8 +46,8 @@ homelab-gitops/
 │   ├── open-webui/           # AI chat interface
 │   └── sealed-secrets/       # Sealed Secrets controller
 ├── tests/                    # Test suite
-│   ├── smoke-test.sh         # Infrastructure health (29 tests)
-│   ├── test-auth.sh          # Authentication flows (14 tests)
+│   ├── smoke-test.sh         # Infrastructure health (111 tests)
+│   ├── test-auth.sh          # Authentication flows (27 tests)
 │   └── validate-manifests.sh # Kustomize validation (20 checks)
 ├── scripts/                  # Provisioning scripts
 │   ├── provision-k3s-server.sh  # K3s node setup
@@ -89,7 +87,7 @@ homelab-gitops/
 | n8n | autom8.lab.axiomlayer.com | Forward Auth | n8n | CNPG |
 | Alertmanager | alerts.lab.axiomlayer.com | Forward Auth | monitoring | - |
 | Longhorn | longhorn.lab.axiomlayer.com | Forward Auth | longhorn-system | - |
-| ArgoCD | argocd.lab.axiomlayer.com | Native OIDC | argocd | - |
+| ArgoCD | argocd.lab.axiomlayer.com | Dex OIDC | argocd | - |
 | Grafana | grafana.lab.axiomlayer.com | Native OIDC | monitoring | - |
 | Outline | docs.lab.axiomlayer.com | Native OIDC | outline | CNPG |
 | Plane | plane.lab.axiomlayer.com | Native OIDC | plane | CNPG |
@@ -105,7 +103,7 @@ CloudNativePG manages PostgreSQL instances:
 | outline-db | outline | outline-db-rw.outline.svc:5432 | Yes |
 | n8n-db | n8n | n8n-db-rw.n8n.svc:5432 | No |
 | open-webui-db | open-webui | open-webui-db-rw.open-webui.svc:5432 | No |
-| plane-db | plane | plane-db-rw.plane.svc:5432 | No |
+| postgres | default | postgres-rw.default.svc:5432 | No |
 
 ## Automated Backups
 
@@ -347,6 +345,32 @@ kubectl get volumes -n longhorn-system
    - Store client_id/secret in .env and create sealed secret
 
 6. Commit and push - CI validates, then ArgoCD syncs
+
+## ArgoCD Configuration
+
+### Health Customizations
+ArgoCD is configured with custom Lua health checks for resources that don't have built-in health status:
+- `bitnami.com/SealedSecret` - Always healthy when synced
+- `cert-manager.io/Certificate` - Checks Ready condition
+- `cert-manager.io/ClusterIssuer` - Checks Ready condition
+- `postgresql.cnpg.io/Cluster` - Checks phase == "Cluster in healthy state"
+- `traefik.io/Middleware` - Always healthy when synced
+- `networking.k8s.io/NetworkPolicy` - Always healthy when synced
+
+These are defined in `apps/argocd/applications/argocd-helm.yaml` under `configs.cm.resource.customizations`.
+
+### Dex OIDC
+ArgoCD uses Dex as an OIDC intermediary which connects to Authentik:
+- Dex config is in `configs.cm.dex.config`
+- Dex redirects to Authentik for authentication
+- Callback URL: `https://argocd.lab.axiomlayer.com/api/dex/callback`
+
+### ignoreDifferences
+The argocd-helm Application ignores runtime changes to certain ConfigMaps/Secrets:
+- `argocd-secret` - Contains generated credentials
+- `argocd-cmd-params-cm` - Runtime parameters
+- `argocd-rbac-cm` - RBAC policies
+- Note: `argocd-cm` is NOT ignored so health customizations sync from git
 
 ## Authentik Configuration
 
