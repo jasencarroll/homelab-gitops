@@ -162,7 +162,7 @@ jobs:
 
   outline-sync:
     name: Outline Sync
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, homelab]
     needs: [ci-passed]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     env:
