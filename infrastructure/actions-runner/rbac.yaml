@@ -19,29 +19,48 @@ metadata:
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 rules:
-  # Read-only access to nodes
+  # Read-only access to core resources
   - apiGroups: [""]
-    resources: ["nodes"]
+    resources: ["nodes", "namespaces"]
     verbs: ["get", "list"]
-  # Read-only access to pods across all namespaces
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list"]
-  # Read-only access to PVCs
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list"]
-  # Read-only access to certificates
-  - apiGroups: ["cert-manager.io"]
-    resources: ["certificates"]
-    verbs: ["get", "list"]
-  # Read-only access to configmaps (for OIDC config checks)
   - apiGroups: [""]
-    resources: ["configmaps"]
+    resources: ["configmaps", "secrets"]
     verbs: ["get", "list"]
-  # Read-only access to deployments (for deployment config checks)
+  # Read-only access to apps
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list"]
+  # Read-only access to networking
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list"]
+  # Read-only access to cert-manager
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "clusterissuers", "issuers"]
+    verbs: ["get", "list"]
+  # Read-only access to ArgoCD
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "applicationsets"]
+    verbs: ["get", "list"]
+  # Read-only access to CloudNativePG
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters"]
+    verbs: ["get", "list"]
+  # Read-only access to Longhorn
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes", "nodes"]
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
