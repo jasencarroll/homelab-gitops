@@ -29,3 +29,19 @@ spec:
       port: 111
       targetPort: 111
       protocol: TCP
+    - name: statd
+      port: 32765
+      targetPort: 32765
+      protocol: TCP
+    - name: statd-udp
+      port: 32765
+      targetPort: 32765
+      protocol: UDP
+    - name: lockd
+      port: 32767
+      targetPort: 32767
+      protocol: TCP
+    - name: lockd-udp
+      port: 32767
+      targetPort: 32767
+      protocol: UDP

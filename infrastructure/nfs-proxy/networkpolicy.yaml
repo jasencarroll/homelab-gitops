@@ -43,6 +43,14 @@ spec:
           port: 20048
         - protocol: TCP
           port: 111
+        - protocol: TCP
+          port: 32765
+        - protocol: UDP
+          port: 32765
+        - protocol: TCP
+          port: 32767
+        - protocol: UDP
+          port: 32767
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

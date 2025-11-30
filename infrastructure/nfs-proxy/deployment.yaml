@@ -39,6 +39,18 @@ spec:
             - name: rpcbind
               containerPort: 111
               protocol: TCP
+            - name: statd
+              containerPort: 32765
+              protocol: TCP
+            - name: statd-udp
+              containerPort: 32765
+              protocol: UDP
+            - name: lockd
+              containerPort: 32767
+              protocol: TCP
+            - name: lockd-udp
+              containerPort: 32767
+              protocol: UDP
           securityContext:
             privileged: true
             capabilities:
