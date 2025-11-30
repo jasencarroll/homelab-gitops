@@ -4,3 +4,5 @@ namespace: monitoring
 resources:
   - grafana-certificate.yaml
   - grafana-oidc-sealed-secret.yaml
+  - grafana-db-cluster.yaml
+  - grafana-db-networkpolicy.yaml
