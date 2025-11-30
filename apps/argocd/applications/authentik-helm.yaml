@@ -36,8 +36,21 @@ spec:
           enabled: false
         redis:
           enabled: true
+          master:
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
         server:
           replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
           ingress:
             enabled: true
             ingressClassName: traefik
@@ -56,6 +69,12 @@ spec:
               mountPath: /blueprints/custom
         worker:
           replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
           volumes:
             - name: blueprints
               configMap:
