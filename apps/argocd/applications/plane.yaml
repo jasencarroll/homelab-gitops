@@ -20,14 +20,12 @@ spec:
           enabled: true
           appHost: plane.lab.axiomlayer.com
           ingressClass: traefik
-          annotations:
+          ingress_annotations:
             traefik.ingress.kubernetes.io/router.entrypoints: websecure
             traefik.ingress.kubernetes.io/router.tls: "true"
 
         ssl:
-          createIssuer: false
-          generateTLS: true
-          secretName: plane-tls
+          tls_secret_name: plane-tls
 
         postgres:
           local_setup: true
@@ -54,18 +52,9 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: plane
-  ignoreDifferences:
-    - group: networking.k8s.io
-      kind: Ingress
-      name: plane-ingress
-      jsonPointers:
-        - /spec/tls
-        - /metadata/annotations/traefik.ingress.kubernetes.io~1router.entrypoints
-        - /metadata/annotations/traefik.ingress.kubernetes.io~1router.tls
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - RespectIgnoreDifferences=true

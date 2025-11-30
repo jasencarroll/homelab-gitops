@@ -14,7 +14,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: campfire
   strategy:
-    type: Recreate
+    type: RollingUpdate
   template:
     metadata:
       labels:
@@ -24,6 +24,7 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/arch: amd64
+        kubernetes.io/hostname: panther
       imagePullSecrets:
         - name: ghcr-pull-secret
       securityContext:
