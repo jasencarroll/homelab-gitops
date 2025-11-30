@@ -173,11 +173,7 @@ spec:
       name: argocd-secret
       jqPathExpressions:
         - .data
-    - group: ""
-      kind: ConfigMap
-      name: argocd-cm
-      jqPathExpressions:
-        - .data
+    # argocd-cm NOT ignored - health customizations must be applied from git
     - group: ""
       kind: ConfigMap
       name: argocd-cmd-params-cm
