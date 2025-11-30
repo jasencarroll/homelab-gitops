@@ -23,7 +23,13 @@ spec:
         configs:
           cm:
             url: https://argocd.lab.axiomlayer.com
-            # OIDC config managed separately via configmaps.yaml
+            oidc.config: |
+              name: Authentik
+              issuer: https://auth.lab.axiomlayer.com/application/o/argocd/
+              clientID: argocd
+              clientSecret: $oidc.authentik.clientSecret
+              requestedScopes: ["openid", "profile", "email"]
+              insecureSkipVerify: true
           params:
             server.insecure: true  # TLS terminated at Traefik
 
