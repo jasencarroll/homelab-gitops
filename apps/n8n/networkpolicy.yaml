@@ -142,3 +142,10 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Allow Kubernetes API server (required for CNPG cluster coordination)
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.1/32
+      ports:
+        - protocol: TCP
+          port: 443
