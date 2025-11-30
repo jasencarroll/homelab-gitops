@@ -38,6 +38,11 @@ spec:
                       - email
                     insecureSkipEmailVerified: true
                     insecureEnableGroups: true
+          rbac:
+            policy.default: role:readonly
+            policy.csv: |
+              # Admin access for jasen user
+              g, jasen@axiomlayer.com, role:admin
           params:
             server.insecure: true  # TLS terminated at Traefik
 
