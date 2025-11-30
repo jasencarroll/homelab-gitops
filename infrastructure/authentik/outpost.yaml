@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     goauthentik.io/outpost-name: forward-auth-outpost
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: authentik-outpost

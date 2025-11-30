@@ -37,6 +37,7 @@ spec:
         redis:
           enabled: true
         server:
+          replicas: 2
           ingress:
             enabled: true
             ingressClassName: traefik
@@ -54,6 +55,7 @@ spec:
             - name: blueprints
               mountPath: /blueprints/custom
         worker:
+          replicas: 2
           volumes:
             - name: blueprints
               configMap:

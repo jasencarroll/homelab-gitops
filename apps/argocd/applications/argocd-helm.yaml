@@ -28,20 +28,29 @@ spec:
             server.insecure: true  # TLS terminated at Traefik
 
         server:
+          replicas: 2
           ingress:
             enabled: false  # Managed separately via ingress.yaml
+
+        repoServer:
+          replicas: 2
 
         redis:
           enabled: true
 
         dex:
           enabled: true
+          replicas: 2
 
         notifications:
           enabled: true
 
         applicationSet:
           enabled: true
+          replicas: 2
+
+        controller:
+          replicas: 2
 
   destination:
     server: https://kubernetes.default.svc
