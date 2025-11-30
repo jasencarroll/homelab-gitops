@@ -10,6 +10,7 @@ Detailed documentation for all infrastructure components in the homelab cluster.
 - [Authentik (SSO)](#authentik-sso)
 - [ArgoCD (GitOps)](#argocd-gitops)
 - [Longhorn (Storage)](#longhorn-storage)
+- [Backups](#backups)
 - [CloudNativePG](#cloudnativepg)
 - [External-DNS](#external-dns)
 - [Loki + Promtail](#loki--promtail)
@@ -320,6 +321,13 @@ kubeseal --re-encrypt < old-sealed-secret.yaml > new-sealed-secret.yaml
 | authentik-redis | Cache and sessions |
 | ak-outpost-forward-auth | Forward auth proxy |
 
+### GitOps Assets
+
+- `infrastructure/authentik/outpost.yaml` defines the `ak-outpost-forward-auth-outpost` Deployment, Service, and Traefik middleware so the forward-auth proxy is version-controlled.
+- `infrastructure/authentik/rbac.yaml` grants the Authentik service account the cluster-scoped permissions the outpost needs (Deployments, Traefik CRDs, Secrets).
+- `infrastructure/authentik/outpost-token-sealed-secret.yaml` stores the outpost API token that Authentik issues.
+- `infrastructure/authentik/sealed-secret.yaml` keeps the Helm chart secrets (PostgreSQL password, secret key) encrypted.
+
 ### Forward Auth Flow
 
 ```
@@ -335,12 +343,11 @@ User Request → Traefik → Authentik Outpost → Decision
 
 ### Outpost Configuration
 
-The forward auth outpost is created in Authentik admin:
+Authentik still owns the outpost definition, but everything needed to run it inside Kubernetes is declarative:
 
-1. Applications → Outposts
-2. Create outpost with:
-   - Type: Proxy
-   - Integration: Embedded (for forward auth)
+1. Create/refresh the outpost token in the Authentik UI, then update `infrastructure/authentik/outpost-token-sealed-secret.yaml` via `kubeseal`.
+2. `apps/argocd/applications/authentik.yaml` syncs the Deployment/Middleware/RBAC from this repo.
+3. In Authentik → Applications → Outposts, target the `ak-outpost-forward-auth-outpost` deployment (type `Proxy`, integration `Embedded`).
 
 ### Provider Types
 
@@ -427,6 +434,11 @@ ArgoCD runs in insecure mode (TLS handled by Traefik):
 data:
   server.insecure: "true"
 ```
+
+### Single Sign-On
+
+- `apps/argocd/sealed-secret.yaml` stores the Authentik OIDC client secret under `oidc.authentik.clientSecret`.
+- `apps/argocd/ingress.yaml` attaches the same forward-auth middleware used by every other ingress plus the Authentik OIDC settings so users log in with their SSO account instead of the local admin.
 
 ### Commands
 
@@ -557,6 +569,38 @@ kubectl get backuptargets -n longhorn-system
 
 # View manager logs
 kubectl logs -n longhorn-system -l app=longhorn-manager -f
+```
+
+---
+
+## Backups
+
+**Automated database dumps and Longhorn exports**
+
+### CronJob + Secrets
+
+- `apps/argocd/applications/backups.yaml` syncs the `infrastructure/backups` kustomization, which includes `backup-cronjob.yaml` for the 03:00 database dumps on `neko`. The job pg_dumps Authentik (`authentik-db-rw`) and Outline (`outline-db-rw`), writes the results to `/backup` (NAS via the NFS proxy), and trims everything beyond the seven newest archives.
+- `infrastructure/backups/backup-db-credentials-sealed.yaml` provides the database passwords as a Sealed Secret in `longhorn-system`.
+
+### Longhorn Recurring Jobs
+
+- `infrastructure/backups/longhorn-recurring-jobs.yaml` describes the snapshot + backup cadence for Longhorn volumes so new PVCs inherit the 02:00 schedule and seven-day retention without manual UI edits.
+
+### Operator Script
+
+- `scripts/backup-homelab.sh` is the manual safety net: it copies `.env`, exports the Sealed Secret keys, takes fresh CNPG dumps by exec'ing into the pods, and captures Longhorn settings to a timestamped folder (`~/homelab-backups/{DATE}` by default).
+
+### Commands
+
+```bash
+# Check CronJob + Jobs
+kubectl get cronjobs,job -n longhorn-system -l app.kubernetes.io/name=homelab-backup
+
+# Inspect the last run
+kubectl logs job/<job-name> -n longhorn-system
+
+# Trigger an on-demand run
+kubectl create job --from=cronjob/homelab-backup homelab-backup-manual-$(date +%s) -n longhorn-system
 ```
 
 ---
@@ -774,6 +818,12 @@ GF_AUTH_GENERIC_OAUTH_AUTH_URL: https://auth.lab.axiomlayer.com/application/o/au
 GF_AUTH_GENERIC_OAUTH_TOKEN_URL: https://auth.lab.axiomlayer.com/application/o/token/
 GF_AUTH_GENERIC_OAUTH_API_URL: https://auth.lab.axiomlayer.com/application/o/userinfo/
 ```
+
+### Monitoring Extras Application
+
+- `apps/argocd/applications/monitoring-extras.yaml` syncs the `infrastructure/monitoring` kustomization so Grafana has its own namespace bootstrap and TLS certificate (`grafana-certificate.yaml`) independent of the Helm chart defaults.
+- The Application runs with `sync-wave: 4`, which means it lands before Grafana tries to read the TLS secret referenced by the ingress.
+- Keep `infrastructure/grafana/sealed-secret.yaml` (OIDC client) and the monitoring extras Application in lockstep whenever you rotate Authentik credentials.
 
 ---
 

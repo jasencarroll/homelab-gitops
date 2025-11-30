@@ -1,0 +1,32 @@
+{
+  "collectionId": "8524be87-e73d-4482-aaa5-0bfd2a7263a4",
+  "documents": {
+    "README.md": {
+      "id": "efdbde43-8ff7-4760-bdd9-e9d4aefe1e03"
+    },
+    "docs/APPLICATIONS.md": {
+      "id": "4d53b449-3dd6-4d9f-a099-dcd371f8a314"
+    },
+    "docs/ARCHITECTURE.md": {
+      "id": "fba40189-ea77-4df7-a200-d074acabc05e"
+    },
+    "docs/INFRASTRUCTURE.md": {
+      "id": "3c0b39e5-7821-4644-ad20-7216aeb51ecb"
+    },
+    "docs/NETWORKING.md": {
+      "id": "3462d292-1e7d-4ebc-ab63-66c4581e44bc"
+    },
+    "docs/OUTLINE_SYNC_PLAN.md": {
+      "id": "388f66ab-091d-4065-95d0-981c2eddb752"
+    },
+    "docs/RUNBOOKS.md": {
+      "id": "64a0610c-c577-43fb-8fcb-41b23b02e4f6"
+    },
+    "docs/SECRETS.md": {
+      "id": "2b2bfbfe-3d1f-46bd-84a3-38b9db0c7249"
+    },
+    "docs/TROUBLESHOOTING.md": {
+      "id": "b0cac0e1-9bba-4a0b-bdd2-bc285b3fc556"
+    }
+  }
+}

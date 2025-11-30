@@ -22,7 +22,7 @@ Comprehensive documentation for all applications deployed in the homelab cluster
 | Campfire | chat.lab.axiomlayer.com | campfire | Yes | SQLite | 5Gi Longhorn |
 | n8n | autom8.lab.axiomlayer.com | n8n | Yes | PostgreSQL (CNPG) | 5Gi Longhorn |
 | Open WebUI | ai.lab.axiomlayer.com | open-webui | Yes | PostgreSQL (CNPG) | 5Gi Longhorn |
-| Outline | docs.lab.axiomlayer.com | outline | Yes | PostgreSQL (CNPG) | 5Gi Longhorn |
+| Outline | docs.lab.axiomlayer.com | outline | Yes | PostgreSQL (CNPG) + Redis | 5Gi Longhorn |
 | Plane | plane.lab.axiomlayer.com | plane | Yes | PostgreSQL (Helm) | 10Gi Longhorn |
 | Telnet Server | telnet.lab.axiomlayer.com | telnet-server | Yes | None | None |
 | Dashboard | db.lab.axiomlayer.com | dashboard | Yes | None | None |
@@ -302,9 +302,10 @@ outline/
 ├── ingress.yaml
 ├── pvc.yaml               # 5Gi for attachments
 ├── postgres-cluster.yaml  # CloudNativePG
-├── redis-deployment.yaml  # Session storage
+├── redis.yaml             # Redis Deployment + Service (session cache)
 ├── sealed-secret.yaml
 ├── networkpolicy.yaml
+├── pdb.yaml
 └── kustomization.yaml
 ```
 
@@ -335,6 +336,12 @@ OIDC_AUTH_URI: https://auth.lab.axiomlayer.com/application/o/authorize/
 OIDC_TOKEN_URI: https://auth.lab.axiomlayer.com/application/o/token/
 OIDC_USERINFO_URI: https://auth.lab.axiomlayer.com/application/o/userinfo/
 ```
+
+### Redis Cache
+
+- `apps/outline/redis.yaml` runs Redis with `runAsUser: 999`, probes, and an `emptyDir` volume (Outline only needs an in-memory cache).
+- The service `redis.outline.svc:6379` lines up with `REDIS_URL` in the deployment.
+- Network policies scope Redis ingress to the Outline pods while still allowing egress to Authentik and CNPG endpoints for sign-in callbacks.
 
 ---
 

@@ -159,3 +159,22 @@ jobs:
 
       - name: Run auth tests
         run: ./tests/test-auth.sh
+
+  outline-sync:
+    name: Outline Sync
+    runs-on: ubuntu-latest
+    needs: [ci-passed]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      OUTLINE_API_TOKEN: ${{ secrets.OUTLINE_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync docs to Outline
+        run: |
+          if [ -z "$OUTLINE_API_TOKEN" ]; then
+            echo "OUTLINE_API_TOKEN not set; skipping Outline sync."
+            exit 0
+          fi
+          python3 scripts/outline_sync.py

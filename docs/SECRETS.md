@@ -200,15 +200,19 @@ kubectl create secret generic my-secret -n my-namespace \
 
 | Namespace | Secret Name | Purpose | Keys |
 |-----------|-------------|---------|------|
-| actions-runner | github-runner-token | GitHub PAT | `github_token` |
-| campfire | campfire-secret | Rails secrets | `SECRET_KEY_BASE`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` |
-| campfire | ghcr-pull-secret | Image pull | `.dockerconfigjson` |
+| actions-runner | github-arc-token | GitHub PAT for Actions Runner Controller | `github_token` |
+| argocd | argocd-secret | Authentik OIDC client for ArgoCD | `oidc.authentik.clientSecret` |
+| authentik | authentik-helm-secrets | Helm chart secrets | `postgresql_password`, `secret_key` |
+| authentik | authentik-outpost-token | Token for forward-auth outpost | `token` |
+| campfire | campfire-secret | Rails + VAPID secrets | `SECRET_KEY_BASE`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` |
+| campfire | ghcr-pull-secret | GHCR pull credentials | `.dockerconfigjson` |
 | cert-manager | cloudflare-api-token | DNS-01 challenge | `api-token` |
-| external-dns | cloudflare-api-token | DNS records | `api-token` |
-| monitoring | grafana-oidc-secret | SSO | `client_secret` |
-| n8n | n8n-secrets | Encryption | `N8N_ENCRYPTION_KEY` |
-| open-webui | open-webui-secret | API keys | Various |
-| outline | outline-secrets | App secrets | `SECRET_KEY`, `UTILS_SECRET`, `OIDC_CLIENT_SECRET` |
+| external-dns | cloudflare-api-token | DNS management | `api-token` |
+| longhorn-system | backup-db-credentials | Authentik + Outline DB passwords for CronJob | `authentik-password`, `outline-password` |
+| monitoring | grafana-oidc-secret | Grafana SSO client | `client-id`, `client-secret` |
+| n8n | n8n-secrets | CNPG password + encryption key | `db-password`, `encryption-key` |
+| open-webui | open-webui-secrets | API tokens + session secret | `secret-key`, etc. |
+| outline | outline-secrets | App + OIDC secrets | `database-url`, `oidc-client-secret`, `secret-key`, `utils-secret` |
 
 ### Secret Contents Reference
 
@@ -241,6 +245,34 @@ data:
   VAPID_PUBLIC_KEY: <vapid-public-key>
   VAPID_PRIVATE_KEY: <vapid-private-key>
 ```
+
+#### ArgoCD OIDC Secret
+
+```yaml
+data:
+  oidc.authentik.clientSecret: <client-secret-from-authentik>
+```
+
+Rotate this whenever you re-issue the Authentik application credentials for ArgoCD.
+
+#### Authentik Outpost Token
+
+```yaml
+data:
+  token: <copy from Authentik outpost configuration>
+```
+
+The token is downloaded from Authentik → Outposts → `forward-auth-outpost`. Seal it immediately after download.
+
+#### Backup DB Credentials
+
+```yaml
+data:
+  authentik-password: <output of kubectl get secret authentik-db-app ...>
+  outline-password: <output of kubectl get secret outline-db-app ...>
+```
+
+These values feed the `homelab-backup` CronJob. Update the secret any time you rotate CNPG credentials.
 
 ---
 

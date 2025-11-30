@@ -35,8 +35,8 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 | Node | Role | Tailscale IP | Local IP | Storage |
 |------|------|--------------|----------|---------|
 | neko | control-plane | 100.67.134.110 | 192.168.1.167 | 462GB NVMe |
-| neko2 | control-plane | 100.121.67.60 | 192.168.1.103 | 462GB NVMe |
-| bobcat | agent (Raspberry Pi) | 100.106.35.14 | 192.168.1.49 | 500GB SSD |
+| neko2 | control-plane | 100.106.35.14 | 192.168.1.103 | 462GB NVMe |
+| bobcat | agent (Raspberry Pi) | 100.121.67.60 | 192.168.1.49 | 500GB SSD |
 
 ### GPU Workstation
 
@@ -87,60 +87,62 @@ GitOps-managed K3s homelab with ArgoCD, SSO, TLS, and observability.
 ## Directory Structure
 
 ```
-homelab-gitops/
-├── .github/
-│   └── workflows/
-│       └── test-runner.yaml          # CI workflow using self-hosted runner
+axiomlayer/
+├── .github/workflows/test-runner.yaml     # CI workflow for self-hosted runner
 ├── apps/
 │   ├── argocd/
-│   │   └── applications/             # ArgoCD Application manifests
-│   │       ├── actions-runner-controller.yaml
-│   │       ├── actions-runner-infra.yaml
-│   │       ├── alertmanager.yaml
-│   │       ├── authentik.yaml
-│   │       ├── cert-manager.yaml
-│   │       ├── cloudnative-pg.yaml
-│   │       ├── external-dns.yaml
-│   │       ├── loki.yaml
-│   │       ├── longhorn.yaml
-│   │       ├── nfs-proxy.yaml
-│   │       ├── open-webui.yaml
-│   │       ├── plane.yaml
-│   │       ├── plane-extras.yaml
-│   │       ├── root.yaml                 # App of Apps (auto-syncs all Applications)
-│   │       └── telnet-server.yaml
-│   ├── n8n/                          # Workflow automation
-│   ├── outline/                      # Documentation wiki
-│   ├── plane/                        # Project management (extras)
-│   └── telnet-server/                # Demo app
+│   │   ├── applications/                  # App-of-Apps manifests (infra + apps)
+│   │   │   ├── actions-runner-*.yaml
+│   │   │   ├── authentik*.yaml
+│   │   │   ├── backups.yaml               # Automates infrastructure/backups
+│   │   │   ├── monitoring-extras.yaml     # Grafana cert + namespace bootstrap
+│   │   │   ├── outline.yaml / plane*.yaml
+│   │   │   ├── root.yaml                  # App of Apps (sync wave 0)
+│   │   │   └── telnet-server.yaml
+│   │   ├── sealed-secret.yaml             # Authentik OIDC client for ArgoCD
+│   │   ├── configmaps.yaml                # Core settings (repo URL, RBAC)
+│   │   └── ingress.yaml                   # https://argocd.lab.axiomlayer.com
+│   ├── campfire/                          # 37signals Campfire deployment
+│   ├── dashboard/                         # db.lab.axiomlayer.com portal (Nginx)
+│   ├── n8n/                               # Workflow automation (CNPG + ingress)
+│   ├── outline/                           # Wiki (CNPG, Redis, NetworkPolicy, PDB)
+│   ├── plane/                             # Plane Helm overlays + extras
+│   └── telnet-server/                     # Demo workload
+├── clusters/lab/                          # Root kustomization entrypoint
+├── docs/                                  # Architecture/runbooks for Outline/wiki
+│   ├── ARCHITECTURE.md
+│   ├── APPLICATIONS.md
+│   └── ...
 ├── infrastructure/
-│   ├── actions-runner/               # GitHub Actions self-hosted runners
-│   │   ├── namespace.yaml
-│   │   ├── runner-deployment.yaml    # RunnerDeployment for jasencdev org
-│   │   └── sealed-secret.yaml        # GitHub PAT
-│   ├── alertmanager/                 # Alert management
-│   │   ├── configmap.yaml            # Alert routing config
-│   │   ├── deployment.yaml
-│   │   ├── prometheus-rules.yaml     # Alert rules
-│   │   └── ingress.yaml
-│   ├── cert-manager/                 # TLS certificates
-│   ├── cloudnative-pg/               # PostgreSQL operator
-│   ├── external-dns/                 # Automatic DNS management
-│   ├── longhorn/                     # Distributed storage + UI ingress
-│   ├── loki/                         # Log aggregation
-│   ├── nfs-proxy/                    # NFS proxy for Longhorn backups
-│   │   ├── deployment.yaml           # nfs-server on neko node
-│   │   └── service.yaml              # ClusterIP for Longhorn
-│   └── open-webui/                   # AI chat interface
-│       ├── deployment.yaml           # Open WebUI container
-│       ├── configmap.yaml            # Ollama connection config
-│       └── ingress.yaml              # ai.lab.axiomlayer.com
-├── scripts/                          # Provisioning scripts
-│   ├── provision-siberian.sh         # GPU workstation (5070Ti + Ollama)
-│   ├── provision-k3s-server.sh       # K3s control-plane node
-│   └── provision-k3s-agent.sh        # K3s worker node
-└── clusters/lab/                     # Root kustomization
+│   ├── actions-runner/                    # Self-hosted GitHub runners + PAT
+│   ├── alertmanager/                      # Routing + Prometheus rules
+│   ├── authentik/                         # Helm values, blueprints, outpost, RBAC
+│   ├── backups/                           # CronJob + Longhorn recurring jobs
+│   ├── cert-manager/                      # ClusterIssuer + DNS token
+│   ├── cloudnative-pg/                    # CNPG operator
+│   ├── external-dns/                      # Cloudflare integration
+│   ├── grafana/                           # OIDC secret
+│   ├── longhorn/                          # Storage + backup target config
+│   ├── monitoring/                        # Grafana TLS certificate
+│   ├── nfs-proxy/                         # Single-IP NAS proxy for Longhorn
+│   └── open-webui/                        # Ollama connectivity + ingress
+├── scripts/                               # Provisioning & maintenance helpers
+│   ├── backup-homelab.sh                  # Local backup helper
+│   ├── provision-k3s-{server,agent}.sh    # Cluster bootstrap
+│   ├── provision-k3s-ollama-agent.sh      # Lightweight GPU agent profile
+│   └── provision-siberian.sh              # GPU workstation automation
+├── templates/                             # Boilerplate for new apps
+└── tests/test-auth.sh                     # Authentik ingress smoke test
 ```
+
+### Syncing Docs to Outline
+
+1. Set `OUTLINE_API_TOKEN` (create one in Outline with `documents.write` + `collections.write` scopes).
+2. Adjust `outline_sync/config.json` if you add/remove local docs.
+3. Run `python3 scripts/outline_sync.py` to create/update the Outline collection defined in the config. The script records collection + document IDs in `outline_sync/state.json` so future runs update in place.
+4. Add the same token as the GitHub secret `OUTLINE_API_TOKEN` so the `outline-sync` job in `.github/workflows/ci.yaml` can publish docs automatically on every push to `main`.
+
+See `docs/OUTLINE_SYNC_PLAN.md` for the publishing hierarchy and API workflow.
 
 ---
 
@@ -240,6 +242,12 @@ The NFS proxy solves the UniFi NAS single-IP NFS export limitation by:
 3. Longhorn connects to the proxy service IP
 
 **Backup Schedule**: Daily at 2:00 AM, retains 7 backups
+
+### Backup Automation
+
+- `infrastructure/backups/` defines the `homelab-backup` CronJob that runs on `neko` at 03:00, dumps Authentik and Outline Postgres databases via CNPG services, writes them to the NAS over the NFS proxy, and keeps only the seven newest archives.
+- `infrastructure/backups/longhorn-recurring-jobs.yaml` codifies the Longhorn snapshot/backup cadence so application PVCs automatically land on the NAS target without manual UI edits.
+- `scripts/backup-homelab.sh` is the operator workflow for ad-hoc backups: it copies the repo `.env`, exports Sealed Secret keys, takes fresh CNPG dumps, and captures Longhorn settings before risky maintenance.
 
 ---
 

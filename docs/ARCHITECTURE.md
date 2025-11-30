@@ -176,6 +176,12 @@ UniFi NAS NFS exports only allow a single client IP. The NFS proxy:
 3. Re-exports via Kubernetes ClusterIP service
 4. All nodes can now access backups via the service
 
+### Data Protection Automation
+
+- `infrastructure/backups/` holds the `homelab-backup` CronJob (03:00 daily on `neko`) plus the `backup-db-credentials` SealedSecret so Authentik and Outline database dumps land on the NAS via the proxy automatically.
+- `infrastructure/backups/longhorn-recurring-jobs.yaml` defines recurring snapshot + backup jobs for Longhorn, ensuring every PVC follows the same retention rules.
+- `scripts/backup-homelab.sh` backs up the repo `.env`, Sealed Secret keys, live CNPG databases, and Longhorn metadata before disruptive maintenance.
+
 ---
 
 ## Security Architecture
@@ -226,6 +232,13 @@ X-Authentik-Uid: abc123def456
 X-Authentik-Name: Jasen
 ```
 
+### Forward Auth Deployment
+
+- `infrastructure/authentik/outpost.yaml` deploys the `ak-outpost-forward-auth-outpost` Deployment/Service/Middleware that Traefik references via `authentik-ak-outpost-forward-auth-outpost@kubernetescrd`.
+- `infrastructure/authentik/rbac.yaml` grants the Authentik service account cluster-wide RBAC (Deployments, Secrets, Traefik CRDs) so no manual bindings are needed.
+- `infrastructure/authentik/outpost-token-sealed-secret.yaml` stores the outpost token issued by Authentik, keeping the middleware stateless and GitOps-friendly.
+- Every ingress copies the annotation block from `templates/app/ingress.yaml`, so attaching forward auth is a one-line operation for any workload.
+
 ### Network Policies
 
 Default-deny network policies are applied to all namespaces:
@@ -253,15 +266,19 @@ All secrets are encrypted using Bitnami Sealed Secrets:
 
 | Namespace | Secret | Purpose |
 |-----------|--------|---------|
-| actions-runner | github-runner-token | GitHub PAT for runners |
-| campfire | campfire-secret | Rails secrets + VAPID keys |
-| campfire | ghcr-pull-secret | GHCR image pull credentials |
-| cert-manager | cloudflare-api-token | DNS-01 challenge |
-| external-dns | cloudflare-api-token | DNS record management |
-| monitoring | grafana-oidc-secret | Grafana SSO |
-| n8n | n8n-secrets | n8n encryption keys |
-| open-webui | open-webui-secret | API keys |
-| outline | outline-secrets | Outline secrets |
+| actions-runner | github-arc-token | GitHub PAT for self-hosted runners |
+| argocd | argocd-secret | Authentik OIDC client secret for ArgoCD |
+| authentik | authentik-helm-secrets | Helm values: Postgres password, secret key |
+| authentik | authentik-outpost-token | Token for forward-auth outpost deployment |
+| campfire | campfire-secret | Rails SECRET_KEY_BASE + VAPID keys |
+| campfire | ghcr-pull-secret | GHCR docker-registry credentials |
+| cert-manager | cloudflare-api-token | DNS-01 challenge token |
+| external-dns | cloudflare-api-token | Cloudflare DNS management token |
+| longhorn-system | backup-db-credentials | Outline/Auth DB creds for CronJob |
+| monitoring | grafana-oidc-secret | Grafana Authentik client |
+| n8n | n8n-secrets | CNPG password + N8N_ENCRYPTION_KEY |
+| open-webui | open-webui-secrets | API keys + session secret |
+| outline | outline-secrets | DB URL, SECRET_KEY, UTILS_SECRET, OIDC secret |
 
 ### Pod Security
 

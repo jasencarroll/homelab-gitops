@@ -1,0 +1,42 @@
+{
+  "apiUrl": "https://docs.lab.axiomlayer.com/api",
+  "collectionName": "Axiomlayer Engineering",
+  "documents": [
+    {
+      "path": "README.md",
+      "title": "Axiomlayer Overview"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "title": "Architecture"
+    },
+    {
+      "path": "docs/INFRASTRUCTURE.md",
+      "title": "Infrastructure"
+    },
+    {
+      "path": "docs/APPLICATIONS.md",
+      "title": "Applications"
+    },
+    {
+      "path": "docs/NETWORKING.md",
+      "title": "Networking"
+    },
+    {
+      "path": "docs/RUNBOOKS.md",
+      "title": "Operational Runbooks"
+    },
+    {
+      "path": "docs/TROUBLESHOOTING.md",
+      "title": "Troubleshooting"
+    },
+    {
+      "path": "docs/SECRETS.md",
+      "title": "Secrets Management"
+    },
+    {
+      "path": "docs/OUTLINE_SYNC_PLAN.md",
+      "title": "Outline Sync Plan"
+    }
+  ]
+}
