@@ -107,13 +107,19 @@ spec:
               limits:
                 memory: 256Mi
         prometheusOperator:
-          replicas: 2
           resources:
             requests:
               cpu: 50m
               memory: 64Mi
             limits:
               memory: 256Mi
+          prometheusConfigReloader:
+            resources:
+              requests:
+                cpu: 50m
+                memory: 32Mi
+              limits:
+                memory: 64Mi
         kube-state-metrics:
           resources:
             requests:
