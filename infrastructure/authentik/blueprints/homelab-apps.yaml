@@ -126,7 +126,11 @@ entries:
       client_secret: "11190a6436c58bfdce05e788c52d38d9a56db18d17417d8b1f31f161b6be622a"
       redirect_uris:
         - matching_mode: strict
-          url: https://argocd.lab.axiomlayer.com/auth/callback
+          url: https://argocd.lab.axiomlayer.com/api/dex/callback
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
       access_token_validity: hours=1
       refresh_token_validity: days=30
       include_claims_in_id_token: true
