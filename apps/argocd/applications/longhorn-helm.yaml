@@ -15,9 +15,9 @@ spec:
       skipCrds: false
       values: |
         persistence:
-          defaultClassReplicaCount: 1
+          defaultClassReplicaCount: 2
         defaultSettings:
-          defaultReplicaCount: 1
+          defaultReplicaCount: 2
         preUpgradeChecker:
           jobEnabled: false
   destination:
