@@ -81,3 +81,24 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: argocd-secret
+      jqPathExpressions:
+        - .data
+    - group: ""
+      kind: ConfigMap
+      name: argocd-cm
+      jqPathExpressions:
+        - .data
+    - group: ""
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
+      jqPathExpressions:
+        - .data
+    - group: ""
+      kind: ConfigMap
+      name: argocd-rbac-cm
+      jqPathExpressions:
+        - .data
