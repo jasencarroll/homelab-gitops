@@ -9,8 +9,8 @@ metadata:
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 data:
-  # Ollama connection (local node acting as embedding/generation endpoint)
-  OLLAMA_BASE_URL: "http://100.79.124.94:11434"
+  # Ollama connection (siberian workstation via Tailscale)
+  OLLAMA_BASE_URL: "http://100.115.3.88:11434"
   # WebUI settings
   WEBUI_NAME: "AxiomLayer AI"
   WEBUI_URL: "https://ai.lab.axiomlayer.com"

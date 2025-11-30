@@ -240,11 +240,14 @@ WEBUI_AUTH: "false"                        # Using Authentik SSO
 
 ### Ollama Connection
 
-The Ollama server runs on `siberian` (GPU workstation) outside the cluster:
+The Ollama estate currently uses two Tailscale endpoints:
 
-1. Connected via Tailscale mesh
-2. Accessible at `http://siberian:11434`
-3. Models loaded on-demand
+| Purpose | Host | Tailscale IP | Notes |
+|---------|------|--------------|-------|
+| Generation (chat) | `siberian` | `100.115.3.88` | Primary RTX 5070 Ti workstation; referenced by `OLLAMA_BASE_URL` in the ConfigMap. |
+| Embeddings | `panther` | `100.79.124.94` | Local node dedicated to embedding workloads; reachable directly for batch jobs. |
+
+Both nodes sit on the Tailscale mesh and expose Ollama on port `11434`. Open WebUI talks to the generation endpoint, while tooling that needs dedicated embedding throughput can call the embedding node directly.
 
 **Recommended Models (16GB VRAM):**
 
