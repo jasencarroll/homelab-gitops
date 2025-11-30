@@ -495,8 +495,11 @@ CRITICAL_NS=(
 )
 
 for ns in "${CRITICAL_NS[@]}"; do
-    PODS_WITHOUT_LIMITS=$(kubectl get pods -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{range .spec.containers[*]}{":"}{.resources.limits.memory}{end}{"\n"}{end}' 2>/dev/null | grep -c ":$" || echo 0)
-    if [ "$PODS_WITHOUT_LIMITS" -eq 0 ]; then
+    PODS_WITHOUT_LIMITS=$(kubectl get pods -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{range .spec.containers[*]}{":"}{.resources.limits.memory}{end}{"\n"}{end}' 2>/dev/null | grep -c ":$" || echo "0")
+    # Ensure we have a single integer value
+    PODS_WITHOUT_LIMITS=$(echo "$PODS_WITHOUT_LIMITS" | head -1 | tr -d '[:space:]')
+    PODS_WITHOUT_LIMITS="${PODS_WITHOUT_LIMITS:-0}"
+    if [ "$PODS_WITHOUT_LIMITS" -eq 0 ] 2>/dev/null; then
         pass "All pods in $ns have resource limits"
     else
         warn "$PODS_WITHOUT_LIMITS containers without memory limits in $ns"
