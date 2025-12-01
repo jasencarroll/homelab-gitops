@@ -29,9 +29,16 @@ CMD ["node", "server.js"]
 Build and push to GitHub Container Registry:
 
 ```bash
-docker build -t ghcr.io/jasencdev/myapp:latest .
-docker push ghcr.io/jasencdev/myapp:latest
+# Use specific version tags for reproducibility and rollback capability
+export VERSION="v1.0.0"  # or use git SHA: $(git rev-parse --short HEAD)
+docker build -t ghcr.io/jasencdev/myapp:${VERSION} .
+docker push ghcr.io/jasencdev/myapp:${VERSION}
 ```
+
+> **Best Practice:** Always use specific version tags (e.g., `v1.0.0`, `sha-abc123`) instead of `latest`. This ensures:
+> - Reproducible deployments (git is the source of truth)
+> - Easy rollbacks to previous versions
+> - Clear audit trail of what's running in production
 
 ### 2. Create the Manifests
 
@@ -93,7 +100,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: myapp
-          image: ghcr.io/jasencdev/myapp:latest
+          image: ghcr.io/jasencdev/myapp:v1.0.0  # Use specific version, not 'latest'
           ports:
             - containerPort: 3000
           securityContext:
@@ -429,19 +436,36 @@ env:
 
 ## Updating Your App
 
-1. Build new container version
-2. Push to registry with new tag
-3. Update image tag in deployment.yaml
-4. Commit and push
-5. ArgoCD syncs the change
-6. Rolling update, zero downtime
+The GitOps way:
 
-Or use `latest` tag and restart:
+1. Build new container version with a new tag
+2. Push to registry: `docker push ghcr.io/jasencdev/myapp:v1.1.0`
+3. Update image tag in `deployment.yaml`
+4. Commit and push to your branch
+5. Open PR, CI validates, merge to main
+6. ArgoCD syncs the change automatically
+7. Rolling update, zero downtime
 
-> **Note:** Using `kubectl rollout restart` requires direct cluster access and bypasses the GitOps workflow. This approach is not aligned with the platform's philosophy ("No kubectl. No SSH. No manual deploys. Just git push and watch it ride."). The recommended GitOps-friendly method is to update the image tag in your manifest and push the change, letting ArgoCD handle the rollout.
+**Example workflow:**
+
 ```bash
-kubectl rollout restart deployment/myapp -n myapp
+# Build and tag with new version
+export VERSION="v1.1.0"
+docker build -t ghcr.io/jasencdev/myapp:${VERSION} .
+docker push ghcr.io/jasencdev/myapp:${VERSION}
+
+# Update manifest (in deployment.yaml, change image tag to v1.1.0)
+# Commit and push
+git add apps/myapp/deployment.yaml
+git commit -m "Bump myapp to v1.1.0"
+git push origin main
 ```
+
+> **Why not use `latest`?** The `latest` tag breaks GitOps principles:
+> - Git is no longer the source of truth for what's deployed
+> - Rollbacks become difficult (which `latest` are you rolling back to?)
+> - Deployments aren't reproducible
+> - Requires manual `kubectl rollout restart` which bypasses the GitOps workflow
 
 ---
 
