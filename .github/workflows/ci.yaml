@@ -18,9 +18,23 @@ permissions:
   statuses: write
 
 jobs:
+  # Wait for Codex to review PRs before running CI (only on initial PR creation)
+  codex-review-delay:
+    name: Wait for Codex Review
+    runs-on: [self-hosted, homelab]
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+    steps:
+      - name: Wait 2 minutes for Codex review
+        run: |
+          echo "Waiting 2 minutes to allow Codex to review the PR..."
+          sleep 120
+          echo "Proceeding with CI"
+
   validate-manifests:
     name: Validate Manifests
     runs-on: [self-hosted, homelab]
+    needs: [codex-review-delay]
+    if: always() && (needs.codex-review-delay.result == 'success' || needs.codex-review-delay.result == 'skipped')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -105,7 +119,7 @@ jobs:
   ci-passed:
     name: CI Passed
     runs-on: [self-hosted, homelab]
-    needs: [validate-manifests, lint, security]
+    needs: [codex-review-delay, validate-manifests, lint, security]
     if: always()
     steps:
       - name: Check CI results
