@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Skip CI for bot commits (Copilot suggestions, dependabot, etc.)
+# This prevents CI from running on every Copilot fix commit
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   statuses: write
