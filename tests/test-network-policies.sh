@@ -2,7 +2,8 @@
 # test-network-policies.sh - Network Policy enforcement verification tests
 # Tests that NetworkPolicies actually block/allow traffic as intended
 
-set -euo pipefail
+set -uo pipefail
+# Note: not using -e because some commands may fail in expected ways
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 

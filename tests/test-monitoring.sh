@@ -2,7 +2,8 @@
 # test-monitoring.sh - Monitoring and observability stack verification tests
 # Tests Prometheus, Grafana, Loki, and alerting functionality
 
-set -euo pipefail
+set -uo pipefail
+# Note: not using -e because some commands may fail in expected ways
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 
@@ -162,17 +163,22 @@ test_prometheus_targets() {
     # Check targets via kubectl exec
     local targets_response
     targets_response=$(kubectl exec -n "$MONITORING_NAMESPACE" "$prometheus_pod" -c prometheus -- \
-        wget -q -O - "http://localhost:9090/api/v1/targets" 2>/dev/null || echo "failed")
+        wget -q -O - "http://localhost:9090/api/v1/targets" 2>/dev/null) || targets_response="failed"
 
-    if echo "$targets_response" | grep -q '"status":"success"'; then
+    if [[ "$targets_response" == "failed" ]] || [[ -z "$targets_response" ]]; then
+        fail "Prometheus targets API not responding"
+        return
+    fi
+
+    if echo "$targets_response" | grep -q '"status":"success"' 2>/dev/null; then
         pass "Prometheus targets API is responding"
 
-        # Count active targets
+        # Count active targets (use grep -c to avoid SIGPIPE)
         local active_targets
-        active_targets=$(echo "$targets_response" | grep -o '"health":"up"' | wc -l)
+        active_targets=$(echo "$targets_response" | grep -c '"health":"up"' 2>/dev/null || echo "0")
 
         local total_targets
-        total_targets=$(echo "$targets_response" | grep -o '"health":' | wc -l)
+        total_targets=$(echo "$targets_response" | grep -c '"health":' 2>/dev/null || echo "0")
 
         if [[ "$active_targets" -gt 0 ]]; then
             pass "Prometheus has $active_targets of $total_targets targets UP"
@@ -181,19 +187,19 @@ test_prometheus_targets() {
         fi
 
         # Check for specific important targets
-        if echo "$targets_response" | grep -q "kubernetes-apiservers\|apiserver"; then
+        if echo "$targets_response" | grep -q "kubernetes-apiservers\|apiserver" 2>/dev/null; then
             pass "Kubernetes API server target configured"
         else
             info "Kubernetes API server target not found (may use different name)"
         fi
 
-        if echo "$targets_response" | grep -q "kubernetes-nodes\|kubelet"; then
+        if echo "$targets_response" | grep -q "kubernetes-nodes\|kubelet" 2>/dev/null; then
             pass "Kubernetes nodes/kubelet target configured"
         else
             info "Kubernetes nodes target not found (may use different name)"
         fi
     else
-        fail "Prometheus targets API not responding"
+        fail "Prometheus targets API not responding properly"
     fi
 }
 

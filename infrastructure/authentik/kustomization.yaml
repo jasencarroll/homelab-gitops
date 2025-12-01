@@ -9,6 +9,7 @@ resources:
   - rbac.yaml
   - outpost.yaml
   - outpost-token-sealed-secret.yaml
+  - networkpolicy.yaml
 labels:
   - pairs:
       app.kubernetes.io/managed-by: argocd

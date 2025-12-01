@@ -2,7 +2,8 @@
 # test-app-functionality.sh - Application functionality verification tests
 # Tests that applications are not just running but actually functioning correctly
 
-set -euo pipefail
+set -uo pipefail
+# Note: not using -e because some commands may fail in expected ways
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 
@@ -144,8 +145,8 @@ test_authentik() {
         return
     fi
 
-    # Check OpenID configuration endpoint
-    local oidc_url="${AUTHENTIK_URL}/application/o/.well-known/openid-configuration"
+    # Check OpenID configuration endpoint (use argocd provider as test)
+    local oidc_url="${AUTHENTIK_URL}/application/o/argocd/.well-known/openid-configuration"
     response=$(http_request "$oidc_url" "GET" "" "" 10)
 
     if echo "$response" | grep -q "authorization_endpoint"; then

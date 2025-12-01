@@ -2,7 +2,8 @@
 # test-backup-restore.sh - Backup verification and restore validation tests
 # Tests backup CronJob execution, file validation, and dry-run restore capabilities
 
-set -euo pipefail
+set -uo pipefail
+# Note: not using -e because some commands may fail in expected ways
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 
@@ -407,8 +408,9 @@ test_restore_dry_run() {
         fi
 
         # Test database connection with a simple query
+        # CNPG uses peer auth, so run psql without -U flag (connects as postgres superuser)
         local query_result
-        query_result=$(kubectl exec -n "$namespace" "${primary_pod#pod/}" -- psql -U "$db" -d "$db" -c "SELECT 1 as connection_test;" 2>/dev/null)
+        query_result=$(kubectl exec -n "$namespace" "${primary_pod#pod/}" -- psql -d "$db" -c "SELECT 1 as connection_test;" 2>/dev/null)
 
         if echo "$query_result" | grep -q "1"; then
             pass "Database '$db' connection test successful"
@@ -419,7 +421,7 @@ test_restore_dry_run() {
 
         # Get table count to verify database has data
         local table_count
-        table_count=$(kubectl exec -n "$namespace" "${primary_pod#pod/}" -- psql -U "$db" -d "$db" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ')
+        table_count=$(kubectl exec -n "$namespace" "${primary_pod#pod/}" -- psql -d "$db" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ')
 
         if [[ -n "$table_count" ]] && [[ "$table_count" -gt 0 ]]; then
             pass "Database '$db' has $table_count tables in public schema"
@@ -429,7 +431,7 @@ test_restore_dry_run() {
 
         # Get approximate row count for key tables
         local row_info
-        row_info=$(kubectl exec -n "$namespace" "${primary_pod#pod/}" -- psql -U "$db" -d "$db" -t -c "SELECT schemaname, relname, n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 3;" 2>/dev/null)
+        row_info=$(kubectl exec -n "$namespace" "${primary_pod#pod/}" -- psql -d "$db" -t -c "SELECT schemaname, relname, n_live_tup FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 3;" 2>/dev/null)
 
         if [[ -n "$row_info" ]]; then
             info "Top tables by row count for '$db':"
