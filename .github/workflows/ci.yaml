@@ -247,3 +247,28 @@ jobs:
             exit 0
           fi
           python3 scripts/outline_sync.py
+
+  rag-sync:
+    name: RAG Sync
+    runs-on: [self-hosted, homelab]
+    needs: [ci-passed]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      OPEN_WEBUI_URL: https://ai.lab.axiomlayer.com
+      OPEN_WEBUI_API_KEY: ${{ secrets.OPEN_WEBUI_API_KEY }}
+      OPEN_WEBUI_KNOWLEDGE_ID: ${{ secrets.OPEN_WEBUI_KNOWLEDGE_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Sync repo to Open WebUI RAG
+        run: |
+          if [ -z "$OPEN_WEBUI_API_KEY" ]; then
+            echo "OPEN_WEBUI_API_KEY not set; skipping RAG sync."
+            exit 0
+          fi
+          if [ -z "$OPEN_WEBUI_KNOWLEDGE_ID" ]; then
+            echo "OPEN_WEBUI_KNOWLEDGE_ID not set; skipping RAG sync."
+            exit 0
+          fi
+          ./scripts/sync-rag.sh
