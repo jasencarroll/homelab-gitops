@@ -266,8 +266,6 @@ jobs:
       OPEN_WEBUI_URL: http://open-webui.open-webui.svc.cluster.local:8080
       OPEN_WEBUI_API_KEY: ${{ secrets.OPEN_WEBUI_API_KEY }}
       OPEN_WEBUI_KNOWLEDGE_ID: ${{ secrets.OPEN_WEBUI_KNOWLEDGE_ID }}
-      # TEMP: one-time purge of legacy basename-only entries. Remove after first successful run.
-      CLEANUP_LEGACY_BASENAME: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
