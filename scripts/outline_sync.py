@@ -77,6 +77,49 @@ def ensure_collection(api_url: str, token: str, config: Dict[str, Any], state: D
     return collection_id
 
 
+def load_existing_documents(api_url: str, token: str, collection_id: str) -> Dict[str, str]:
+    """Return a mapping of document titles to IDs already in Outline.
+
+    This lets auto-sync reuse existing pages even if local state is empty, preventing
+    duplicate documents when the job runs on a clean workspace.
+    """
+
+    existing: Dict[str, str] = {}
+    limit = 100
+    offset = 0
+
+    while True:
+        resp = outline_request(
+            api_url,
+            token,
+            "documents.list",
+            {
+                "collectionId": collection_id,
+                "limit": limit,
+                "offset": offset,
+                "sort": "title",
+                "direction": "ASC",
+            },
+        )
+
+        data = resp.get("data", [])
+        for doc in data:
+            title = doc.get("title")
+            doc_id = doc.get("id")
+            if title and doc_id:
+                key = normalize_title(title)
+                # Keep the first-seen ID for this normalized title so updates do not
+                # flap between similarly-cased duplicates.
+                existing.setdefault(key, doc_id)
+
+        if len(data) < limit:
+            break
+
+        offset += limit
+
+    return existing
+
+
 def sync_document(
     api_url: str,
     token: str,
@@ -84,10 +127,12 @@ def sync_document(
     entry: Dict[str, Any],
     text: str,
     state: Dict[str, Any],
+    existing_docs: Dict[str, str],
 ) -> str:
     path_key = entry["path"]
     doc_state = state.setdefault("documents", {}).get(path_key, {})
-    doc_id = doc_state.get("id")
+    title_key = normalize_title(entry["title"])
+    doc_id = doc_state.get("id") or existing_docs.get(title_key)
     payload = {
         "title": entry["title"],
         "text": text,
@@ -99,14 +144,23 @@ def sync_document(
     if doc_id:
         payload["id"] = doc_id
         outline_request(api_url, token, "documents.update", payload)
+        state.setdefault("documents", {})[path_key] = {"id": doc_id}
+        existing_docs.setdefault(title_key, doc_id)
         print(f"Updated '{entry['title']}'")
         return doc_id
     payload["collectionId"] = collection_id
     resp = outline_request(api_url, token, "documents.create", payload)
     doc_id = resp["data"]["id"]
     state.setdefault("documents", {})[path_key] = {"id": doc_id}
+    existing_docs[title_key] = doc_id
     print(f"Created '{entry['title']}'")
     return doc_id
+
+
+def normalize_title(title: str) -> str:
+    """Return a normalized version of a title for stable matching."""
+
+    return " ".join(title.split()).lower()
 
 
 def path_to_title(path: str) -> str:
@@ -155,6 +209,7 @@ def main() -> None:
     api_url = config.get("apiUrl", "https://docs.lab.axiomlayer.com/api")
 
     collection_id = ensure_collection(api_url, token, config, state)
+    existing_docs = load_existing_documents(api_url, token, collection_id)
 
     # Auto-discover docs and merge with config
     documents = discover_docs(config)
@@ -166,7 +221,7 @@ def main() -> None:
             print(f"Skipping '{rel_path}' (missing file)")
             continue
         text = file_path.read_text(encoding="utf-8")
-        sync_document(api_url, token, collection_id, entry, text, state)
+        sync_document(api_url, token, collection_id, entry, text, state, existing_docs)
 
     save_json(STATE_PATH, state)
     print(f"\nSync complete. State saved to {STATE_PATH}")
