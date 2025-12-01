@@ -475,7 +475,8 @@ fi
 
 # Check last backup job status (if any jobs exist)
 # Format: NAME STATUS COMPLETIONS DURATION AGE
-LAST_JOB=$(kubectl get jobs -n longhorn-system --sort-by=.metadata.creationTimestamp --no-headers 2>/dev/null | grep "homelab-backup" | tail -1)
+LAST_JOB=$(kubectl get jobs -n longhorn-system --sort-by=.metadata.creationTimestamp --no-headers 2>/dev/null | grep "homelab-backup" || true)
+LAST_JOB=$(echo "$LAST_JOB" | tail -1)
 if [ -n "$LAST_JOB" ]; then
     JOB_NAME=$(echo "$LAST_JOB" | awk '{print $1}')
     JOB_STATUS=$(echo "$LAST_JOB" | awk '{print $2}')
