@@ -130,12 +130,16 @@ metadata:
   namespace: myapp
   labels:
     app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   selector:
     app.kubernetes.io/name: myapp
   ports:
     - port: 80
       targetPort: 3000
+      name: http
 ```
 
 **certificate.yaml**
