@@ -8,7 +8,7 @@ You build a containerized app. You push it. The platform does the rest.
 Code → Docker → Push → GitOps → Live
 ```
 
-No kubectl. No SSH. No manual deploys. Just git push and watch it ride.
+No kubectl. No SSH. No manual deploys. Just git push and watch it deploy.
 
 ---
 
@@ -97,7 +97,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: myapp
-          image: ghcr.io/jasencdev/myapp:v1.0.0  # Use semantic version or commit SHA
+          image: ghcr.io/jasencdev/myapp@sha256:a1b2c3d4e5f67890...  # Pin to digest (64 hex chars)
           ports:
             - containerPort: 3000
           securityContext:
@@ -125,6 +125,8 @@ spec:
             periodSeconds: 10
 ```
 
+> **Note:** Pin container images to SHA256 digests (e.g., `@sha256:a1b2c3d4e5f67890...`) rather than mutable tags like `:latest` for reproducible deployments. Get the digest after pushing: `docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/jasencdev/myapp:v1.0.0`
+
 **service.yaml**
 ```yaml
 apiVersion: v1
@@ -134,10 +136,11 @@ metadata:
   namespace: myapp
   labels:
     app.kubernetes.io/name: myapp
-    app.kubernetes.io/component: server
+    app.kubernetes.io/component: service
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 spec:
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: myapp
   ports:
@@ -153,6 +156,11 @@ kind: Certificate
 metadata:
   name: myapp-tls
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: tls
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   secretName: myapp-tls
   issuerRef:
@@ -197,6 +205,11 @@ kind: NetworkPolicy
 metadata:
   name: myapp-default-deny
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   podSelector: {}
   policyTypes:
@@ -208,6 +221,11 @@ kind: NetworkPolicy
 metadata:
   name: myapp-allow-ingress
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   podSelector:
     matchLabels:
@@ -231,6 +249,11 @@ kind: NetworkPolicy
 metadata:
   name: myapp-allow-egress
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   podSelector:
     matchLabels:
@@ -363,15 +386,32 @@ kind: Cluster
 metadata:
   name: myapp-db
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp-db
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   instances: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
   storage:
     size: 5Gi
     storageClass: longhorn
+
   bootstrap:
     initdb:
       database: myapp
       owner: myapp
+
+  monitoring:
+    enablePodMonitor: true
 ```
 
 Connection string available at:
@@ -415,7 +455,7 @@ kubectl create secret generic myapp-secrets \
   --namespace myapp \
   --from-literal=API_KEY=supersecret \
   --dry-run=client -o yaml | \
-  kubeseal --format yaml > apps/myapp/sealed-secret.yaml
+  kubeseal --controller-name=sealed-secrets --controller-namespace=kube-system --format yaml > apps/myapp/sealed-secret.yaml
 ```
 
 Reference in deployment:
@@ -442,23 +482,12 @@ The GitOps workflow for updates:
 5. ArgoCD detects the change and syncs
 6. Rolling update with zero downtime
 
-Example update workflow:
 
-```bash
-# Build and push with new version
-VERSION=v1.1.0
-docker build -t ghcr.io/jasencdev/myapp:${VERSION} .
-docker push ghcr.io/jasencdev/myapp:${VERSION}
+---
 
-# Update the manifest (use your preferred editor)
-# Change: image: ghcr.io/jasencdev/myapp:v1.0.0
-# To:     image: ghcr.io/jasencdev/myapp:v1.1.0
+## Break Glass: Emergency Operations
 
-# Commit and push
-git add apps/myapp/deployment.yaml
-git commit -m "Update myapp to ${VERSION}"
-git push
-```
+> **Warning:** The following is **not** the recommended workflow and should only be used in exceptional circumstances. Using `kubectl rollout restart` requires direct cluster access and bypasses the GitOps workflow. This approach is not aligned with the platform's philosophy ("No kubectl. No SSH. No manual deploys. Just git push and watch it deploy."). The recommended GitOps-friendly method is to update the image tag in your manifest and push the change, letting ArgoCD handle the rollout.
 
 ArgoCD automatically detects the change and performs a rolling update.
 
