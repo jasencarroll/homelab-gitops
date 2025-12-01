@@ -262,15 +262,32 @@ jobs:
     needs: [ci-passed]
     if: always() && needs.ci-passed.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     env:
-      # Use internal cluster URL to bypass Authentik forward auth
-      OPEN_WEBUI_URL: http://open-webui.open-webui.svc.cluster.local:8080
       OPEN_WEBUI_API_KEY: ${{ secrets.OPEN_WEBUI_API_KEY }}
       OPEN_WEBUI_KNOWLEDGE_ID: ${{ secrets.OPEN_WEBUI_KNOWLEDGE_ID }}
-      # TEMP: one-time purge of legacy basename-only entries. Remove after first successful run.
-      CLEANUP_LEGACY_BASENAME: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            ARCH=$(uname -m)
+            case $ARCH in
+              x86_64) ARCH="amd64" ;;
+              aarch64) ARCH="arm64" ;;
+              armv7l) ARCH="arm" ;;
+            esac
+            OS=$(uname -s)
+            case $OS in
+              Linux) OS="linux" ;;
+              Darwin) OS="darwin" ;;
+              *) echo "Unsupported OS: $OS"; exit 1 ;;
+            esac
+            curl -fsSLo kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/${OS}/${ARCH}/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+          kubectl version --client
 
       - name: Sync repo to Open WebUI RAG
         run: |
