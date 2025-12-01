@@ -2,8 +2,8 @@
 # Smoke tests for homelab infrastructure
 # Run: ./tests/smoke-test.sh
 
-# Note: Do not use 'set -e' as it causes early exit on non-zero returns
-# from commands like grep when no matches are found, even when handled
+set -e
+set -o pipefail
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 
@@ -42,11 +42,17 @@ if ! command -v kubectl &> /dev/null; then
     exit 1
 fi
 
+# Verify cluster connectivity
+if ! kubectl cluster-info &>/dev/null; then
+    echo "ERROR: Cannot connect to cluster"
+    exit 1
+fi
+
 section "Node Health"
 
 # Check all nodes are Ready
 NODE_COUNT=$(kubectl get nodes --no-headers | wc -l)
-READY_NODES=$(kubectl get nodes --no-headers | grep -c " Ready")
+READY_NODES=$(kubectl get nodes --no-headers | grep -c " Ready" || true)
 if [ "$NODE_COUNT" -eq "$READY_NODES" ]; then
     pass "All $NODE_COUNT nodes are Ready"
 else
@@ -158,7 +164,7 @@ else
 fi
 
 # Check PVCs are bound
-UNBOUND_PVC=$(kubectl get pvc -A --no-headers 2>/dev/null | grep -v "Bound" | wc -l)
+UNBOUND_PVC=$(kubectl get pvc -A --no-headers 2>/dev/null | grep -v "Bound" | wc -l | tr -d '[:space:]' || echo "0")
 if [ "$UNBOUND_PVC" -eq 0 ]; then
     pass "All PVCs are bound"
 else
@@ -354,7 +360,7 @@ done
 section "Certificates"
 
 # Check certificates are valid
-INVALID_CERTS=$(kubectl get certificates -A --no-headers 2>/dev/null | grep -v "True" | wc -l)
+INVALID_CERTS=$(kubectl get certificates -A --no-headers 2>/dev/null | grep -v "True" | wc -l | tr -d '[:space:]' || echo "0")
 if [ "$INVALID_CERTS" -eq 0 ]; then
     pass "All certificates are valid"
 else
@@ -415,7 +421,7 @@ fi
 section "Storage Health"
 
 # Check Longhorn volumes health
-DEGRADED_VOLUMES=$(kubectl get volumes.longhorn.io -n longhorn-system -o jsonpath='{range .items[*]}{.metadata.name}:{.status.robustness}{"\n"}{end}' 2>/dev/null | grep -v "healthy" | grep -v "^:" | wc -l)
+DEGRADED_VOLUMES=$(kubectl get volumes.longhorn.io -n longhorn-system -o jsonpath='{range .items[*]}{.metadata.name}:{.status.robustness}{"\n"}{end}' 2>/dev/null | grep -v "healthy" | grep -v "^:" | wc -l | tr -d '[:space:]' || echo "0")
 if [ "$DEGRADED_VOLUMES" -eq 0 ]; then
     pass "All Longhorn volumes are healthy"
 else
@@ -657,7 +663,7 @@ section "TLS Certificate Renewal"
 ALL_CERTS=$(kubectl get certificates -A -o json 2>/dev/null)
 
 if [ -n "$ALL_CERTS" ]; then
-    CERT_COUNT=$(echo "$ALL_CERTS" | grep -o '"kind":"Certificate"' | wc -l)
+    CERT_COUNT=$(echo "$ALL_CERTS" | grep -o '"kind":"Certificate"' | wc -l | tr -d '[:space:]' || echo "0")
     pass "Found $CERT_COUNT certificate(s) in cluster"
 
     # Check each certificate's status
