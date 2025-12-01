@@ -162,9 +162,10 @@ test_last_backup_status() {
         fail "No successful backup recorded in CronJob status"
     fi
 
-    # Check for recent failed jobs
+    # Check for recent failed jobs (not just incomplete - must have Failed=True condition)
     local failed_jobs
-    failed_jobs=$(kubectl get jobs -n "$BACKUP_NAMESPACE" -l "job-name" --field-selector=status.successful=0 -o name 2>/dev/null | grep "$BACKUP_CRONJOB" | wc -l)
+    failed_jobs=$(kubectl get jobs -n "$BACKUP_NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.conditions[?(@.type=="Failed")].status}{"\n"}{end}' 2>/dev/null | grep "$BACKUP_CRONJOB" | grep -c "True" 2>/dev/null || echo "0")
+    failed_jobs=$(echo "$failed_jobs" | tr -d '[:space:]')
 
     if [[ "$failed_jobs" -eq 0 ]]; then
         pass "No failed backup jobs found"
