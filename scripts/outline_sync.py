@@ -142,8 +142,6 @@ def discover_docs(config: Dict[str, Any]) -> list:
                 }
 
     # Also include README.md if configured
-    if "README.md" in explicit:
-        pass  # Keep it
 
     return list(explicit.values())
 
