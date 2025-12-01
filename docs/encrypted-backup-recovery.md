@@ -114,7 +114,7 @@ sudo cryptsetup luksClose backup_crypt
 
 ## Notes
 
-- Backups created: 2024-11-30
+- Last backup: 2024-11-30 (example)
 - Encryption: LUKS2
 - Filesystem: ext4
 - Password stored in 1Password vault under 'Backup Encryption Keys' (not in this document)
