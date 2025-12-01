@@ -176,25 +176,6 @@ is_excluded() {
     return 1
 }
 
-# Get list of changed files since last sync
-get_changed_files() {
-    local last_commit="$1"
-
-    cd "$REPO_ROOT" || { log_error "Cannot access repo root: $REPO_ROOT"; return 1; }
-
-    if [[ -z "$last_commit" ]] || [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
-        log_info "Full sync mode - scanning all matching files"
-        # Full sync - find all matching files
-        for pattern in "${SYNC_PATTERNS[@]}"; do
-            find . -path "./$pattern" -type f 2>/dev/null | sed 's|^\./||' || true
-        done | sort -u
-    else
-        log_info "Incremental sync - finding changes since $last_commit"
-        # Get changed files (Added, Modified, Renamed)
-        git diff --name-only --diff-filter=AMR "$last_commit" HEAD 2>/dev/null | sort -u
-    fi
-}
-
 # Get list of deleted files since last sync
 get_deleted_files() {
     local last_commit="$1"
@@ -280,6 +261,27 @@ upload_file() {
     return 0
 }
 
+# Get all files matching sync patterns
+get_all_matching_files() {
+    cd "$REPO_ROOT" || { log_error "Cannot access repo root: $REPO_ROOT"; return 1; }
+
+    for pattern in "${SYNC_PATTERNS[@]}"; do
+        find . -path "./$pattern" -type f 2>/dev/null | sed 's|^\./||' || true
+    done | sort -u
+}
+
+# Check if file changed since last sync
+file_changed_since() {
+    local file="$1"
+    local last_commit="$2"
+
+    # If no last commit, consider everything changed
+    [[ -z "$last_commit" ]] && return 0
+
+    # Check if file was modified since last commit
+    git diff --name-only "$last_commit" HEAD -- "$file" 2>/dev/null | grep -q .
+}
+
 # Main sync function
 sync_to_rag() {
     log_info "Starting RAG sync to $OPEN_WEBUI_URL"
@@ -289,52 +291,60 @@ sync_to_rag() {
 
     # Load existing KB state
     load_kb_files
+    local kb_file_count=${#KB_FILES_BY_NAME[@]}
     echo ""
 
     # Get last sync point
     local last_commit
     last_commit=$(get_last_sync_commit)
 
+    if [[ -n "$last_commit" ]]; then
+        log_info "Last sync commit: ${last_commit:0:8}"
+    else
+        log_info "No previous sync marker found"
+    fi
+
     local uploaded=0
     local skipped=0
     local deleted=0
     local failed=0
+    local already_synced=0
 
-    # Handle deleted files first
-    log_info "Checking for deleted files..."
-    while IFS= read -r file; do
-        [[ -z "$file" ]] && continue
+    # Handle deleted files first (only if we have a last commit)
+    if [[ -n "$last_commit" ]]; then
+        log_info "Checking for deleted files..."
+        while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
 
-        local filename
-        filename=$(basename "$file")
+            local filename
+            filename=$(basename "$file")
 
-        if [[ -n "${KB_FILES_BY_NAME[$filename]:-}" ]]; then
-            if delete_file "${KB_FILES_BY_NAME[$filename]}" "$filename"; then
-                deleted=$((deleted + 1))
-                unset "KB_FILES_BY_NAME[$filename]"
+            if [[ -n "${KB_FILES_BY_NAME[$filename]:-}" ]]; then
+                if delete_file "${KB_FILES_BY_NAME[$filename]}" "$filename"; then
+                    deleted=$((deleted + 1))
+                    unset "KB_FILES_BY_NAME[$filename]"
+                fi
             fi
-        fi
-    done < <(get_deleted_files "$last_commit")
+        done < <(get_deleted_files "$last_commit")
+    fi
 
     echo ""
-    log_info "Processing changed files..."
+    log_info "Processing files..."
 
-    # Process changed/new files
+    cd "$REPO_ROOT" || { log_error "Cannot access repo root"; exit 1; }
+
+    # Process ALL matching files
     while IFS= read -r file; do
         [[ -z "$file" ]] && continue
-
-        # Check if file matches our patterns
-        if ! matches_sync_patterns "$file"; then
-            continue
-        fi
 
         # Check exclusions
         if is_excluded "$file"; then
-            log_debug "Excluded: $file"
             continue
         fi
 
         local full_path="$REPO_ROOT/$file"
+        local filename
+        filename=$(basename "$file")
 
         # Skip if file doesn't exist or is empty
         if [[ ! -f "$full_path" ]] || [[ ! -s "$full_path" ]]; then
@@ -350,21 +360,52 @@ sync_to_rag() {
             continue
         fi
 
-        # Upload the file
-        if upload_file "$full_path"; then
-            uploaded=$((uploaded + 1))
-        else
-            failed=$((failed + 1))
+        # Decision logic:
+        # 1. If file NOT in KB -> upload it
+        # 2. If file IS in KB -> only upload if changed since last sync (or force sync)
+        local file_in_kb=false
+        if [[ -n "${KB_FILES_BY_NAME[$filename]:-}" ]]; then
+            file_in_kb=true
         fi
 
-    done < <(get_changed_files "$last_commit")
+        if [[ "$file_in_kb" == "false" ]]; then
+            # File not in KB - upload it
+            log_info "New file: $file"
+            if upload_file "$full_path"; then
+                uploaded=$((uploaded + 1))
+            else
+                failed=$((failed + 1))
+            fi
+        elif [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
+            # Force sync - upload regardless
+            log_info "Force sync: $file"
+            if upload_file "$full_path"; then
+                uploaded=$((uploaded + 1))
+            else
+                failed=$((failed + 1))
+            fi
+        elif file_changed_since "$file" "$last_commit"; then
+            # File in KB but changed - update it
+            log_info "Changed: $file"
+            if upload_file "$full_path"; then
+                uploaded=$((uploaded + 1))
+            else
+                failed=$((failed + 1))
+            fi
+        else
+            # File in KB and not changed - skip
+            already_synced=$((already_synced + 1))
+        fi
+
+    done < <(get_all_matching_files)
 
     echo ""
     log_info "===== Sync Summary ====="
-    log_info "  Uploaded: $uploaded"
-    log_info "  Deleted:  $deleted"
-    log_info "  Skipped:  $skipped"
-    log_info "  Failed:   $failed"
+    log_info "  Uploaded:       $uploaded"
+    log_info "  Already synced: $already_synced"
+    log_info "  Deleted:        $deleted"
+    log_info "  Skipped (size): $skipped"
+    log_info "  Failed:         $failed"
 
     # Save sync marker on success
     if [[ $failed -eq 0 ]]; then
