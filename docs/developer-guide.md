@@ -8,7 +8,7 @@ You build a containerized app. You push it. The platform does the rest.
 Code → Docker → Push → GitOps → Live
 ```
 
-No kubectl. No SSH. No manual deploys. Just git push and watch it ride.
+No kubectl. No SSH. No manual deploys. Just git push and watch it deploy.
 
 ---
 
@@ -87,12 +87,13 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: myapp
-          image: ghcr.io/jasencdev/myapp:latest
+          image: ghcr.io/jasencdev/myapp@sha256:a1b2c3d4e5f67890...  # Pin to digest (64 hex chars)
           ports:
             - containerPort: 3000
           securityContext:
@@ -120,6 +121,8 @@ spec:
             periodSeconds: 10
 ```
 
+> **Note:** Pin container images to SHA256 digests (e.g., `@sha256:a1b2c3d4e5f67890...`) rather than mutable tags like `:latest` for reproducible deployments. Get the digest after pushing: `docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/jasencdev/myapp:v1.0.0`
+
 **service.yaml**
 ```yaml
 apiVersion: v1
@@ -129,7 +132,7 @@ metadata:
   namespace: myapp
   labels:
     app.kubernetes.io/name: myapp
-    app.kubernetes.io/component: server
+    app.kubernetes.io/component: service
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 spec:
@@ -139,7 +142,6 @@ spec:
   ports:
     - port: 80
       targetPort: 3000
-      protocol: TCP
       name: http
 ```
 
@@ -199,6 +201,11 @@ kind: NetworkPolicy
 metadata:
   name: myapp-default-deny
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   podSelector: {}
   policyTypes:
@@ -210,6 +217,11 @@ kind: NetworkPolicy
 metadata:
   name: myapp-allow-ingress
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   podSelector:
     matchLabels:
@@ -224,12 +236,20 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 3000
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: myapp-allow-egress
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   podSelector:
     matchLabels:
@@ -362,15 +382,32 @@ kind: Cluster
 metadata:
   name: myapp-db
   namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp-db
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   instances: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
   storage:
     size: 5Gi
     storageClass: longhorn
+
   bootstrap:
     initdb:
       database: myapp
       owner: myapp
+
+  monitoring:
+    enablePodMonitor: true
 ```
 
 Connection string available at:
@@ -439,11 +476,12 @@ env:
 5. ArgoCD syncs the change
 6. Rolling update, zero downtime
 
-Or use `latest` tag and restart:
 
-```bash
-kubectl rollout restart deployment/myapp -n myapp
-```
+---
+
+## Break Glass: Emergency Operations
+
+> **Warning:** The following is **not** the recommended workflow and should only be used in exceptional circumstances. Using `kubectl rollout restart` requires direct cluster access and bypasses the GitOps workflow. This approach is not aligned with the platform's philosophy ("No kubectl. No SSH. No manual deploys. Just git push and watch it deploy."). The recommended GitOps-friendly method is to update the image tag in your manifest and push the change, letting ArgoCD handle the rollout.
 
 ---
 
