@@ -153,6 +153,11 @@ FILES=$(find . -type f \( -name "*.md" -o -name "*.yaml" \) \
     ! -name "*AGENTS.md*" \
     | sort)
 
+# Convert path to safe filename (replace / with __)
+path_to_safe_name() {
+    echo "$1" | sed 's|^\./||' | sed 's|/|__|g'
+}
+
 TOTAL=$(echo "$FILES" | wc -l)
 COUNT=0
 UPLOADED=0
@@ -169,14 +174,16 @@ while IFS= read -r file; do
         continue
     fi
 
-    echo -n "[$COUNT/$TOTAL] $file "
+    # Use path-safe filename to avoid collisions
+    SAFE_NAME=$(path_to_safe_name "$file")
+    echo -n "[$COUNT/$TOTAL] $file -> $SAFE_NAME "
 
     # Copy file to pod
     kubectl cp "$file" "open-webui/$POD:/tmp/sync-file" 2>/dev/null
 
     # Upload and add to KB (pipe through bash for proper JWT handling)
     RESULT=$(cat <<UPLOAD_SCRIPT | kubectl exec -i -n open-webui "$POD" -- bash
-RESP=\$(curl -s -X POST -H 'Authorization: Bearer $API_KEY' -F 'file=@/tmp/sync-file;filename=$file' http://localhost:8080/api/v1/files/)
+RESP=\$(curl -s -X POST -H 'Authorization: Bearer $API_KEY' -F 'file=@/tmp/sync-file;filename=$SAFE_NAME' http://localhost:8080/api/v1/files/)
 FID=\$(echo "\$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
 if [ -n "\$FID" ] && [ "\$FID" != "None" ]; then
     ADD_RESP=\$(curl -s -X POST -H 'Authorization: Bearer $API_KEY' -H 'Content-Type: application/json' -d "{\"file_id\":\"\$FID\"}" 'http://localhost:8080/api/v1/knowledge/$KB_ID/file/add')

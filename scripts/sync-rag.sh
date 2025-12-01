@@ -186,11 +186,19 @@ delete_file() {
     fi
 }
 
+# Convert path to safe filename (replace / with __)
+# e.g., apps/dashboard/configmap.yaml -> apps__dashboard__configmap.yaml
+path_to_safe_name() {
+    echo "$1" | sed 's|/|__|g'
+}
+
 # Upload a file and add to KB (using same method as manual script)
 # Uses piped bash to properly handle JWT tokens with special characters
 upload_file() {
     local file_path="$1"
     local relative_path="${file_path#$REPO_ROOT/}"
+    local safe_name
+    safe_name=$(path_to_safe_name "$relative_path")
 
     # Copy file to pod
     kubectl cp "$file_path" "open-webui/$POD:/tmp/sync-file" 2>/dev/null
@@ -198,7 +206,7 @@ upload_file() {
     # Upload and add to KB inside the pod (pipe through bash for proper JWT handling)
     local result
     result=$(cat <<UPLOAD_SCRIPT | kubectl exec -i -n open-webui "$POD" -- bash
-RESP=\$(curl -s -X POST -H 'Authorization: Bearer $OPEN_WEBUI_API_KEY' -F 'file=@/tmp/sync-file;filename=$relative_path' http://localhost:8080/api/v1/files/)
+RESP=\$(curl -s -X POST -H 'Authorization: Bearer $OPEN_WEBUI_API_KEY' -F 'file=@/tmp/sync-file;filename=$safe_name' http://localhost:8080/api/v1/files/)
 FID=\$(echo "\$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
 if [ -n "\$FID" ] && [ "\$FID" != "None" ]; then
     ADD_RESP=\$(curl -s -X POST -H 'Authorization: Bearer $OPEN_WEBUI_API_KEY' -H 'Content-Type: application/json' -d "{\"file_id\":\"\$FID\"}" 'http://localhost:8080/api/v1/knowledge/$OPEN_WEBUI_KNOWLEDGE_ID/file/add')
@@ -260,7 +268,7 @@ load_kb_files() {
 
     if echo "$response" | jq -e '.files' > /dev/null 2>&1; then
         KB_FILE_COUNT=$(echo "$response" | jq '.files | length')
-        # Build associative array of path -> file_id
+        # Build associative array of name -> file_id
         while IFS= read -r line; do
             local file_id name
             file_id=$(echo "$line" | jq -r '.id')
@@ -273,6 +281,37 @@ load_kb_files() {
     else
         log_warn "  Could not load knowledge base files (may be empty or first sync)"
         KB_FILE_COUNT=0
+    fi
+}
+
+# One-time migration: clean up old-style files (basename only, no __)
+# These files were created before path-safe naming was implemented
+cleanup_legacy_files() {
+    local legacy_count=0
+    local legacy_deleted=0
+
+    log_info "Checking for legacy files (basename-only naming)..."
+
+    for name in "${!KB_FILES[@]}"; do
+        # Legacy files don't contain __ (our path separator)
+        # Skip files that already use path-safe naming
+        if [[ "$name" != *"__"* ]]; then
+            legacy_count=$((legacy_count + 1))
+            local file_id="${KB_FILES[$name]}"
+            log_info "  Removing legacy file: $name (${file_id:0:8}...)"
+            if delete_file "$file_id" "$name"; then
+                legacy_deleted=$((legacy_deleted + 1))
+                unset "KB_FILES[$name]"
+            fi
+        fi
+    done
+
+    if [[ $legacy_count -gt 0 ]]; then
+        log_info "  Legacy cleanup: $legacy_deleted/$legacy_count files removed"
+        # Refresh KB file count after cleanup
+        KB_FILE_COUNT=$((KB_FILE_COUNT - legacy_deleted))
+    else
+        log_info "  No legacy files found (already migrated)"
     fi
 }
 
@@ -297,6 +336,9 @@ sync_to_rag() {
 
     # Load existing KB state
     load_kb_files
+
+    # One-time migration: clean up old basename-only files
+    cleanup_legacy_files
     echo ""
 
     # Get last sync point
@@ -360,9 +402,11 @@ sync_to_rag() {
             continue
         fi
 
-        # Decision logic
+        # Decision logic - look up by safe name (path with / replaced by __)
+        local safe_name
+        safe_name=$(path_to_safe_name "$file")
         local file_in_kb=false
-        if [[ -n "${KB_FILES[$file]:-}" ]]; then
+        if [[ -n "${KB_FILES[$safe_name]:-}" ]]; then
             file_in_kb=true
         fi
 
@@ -378,7 +422,7 @@ sync_to_rag() {
         elif [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
             # Force sync - delete and re-upload
             log_info "Force sync: $file"
-            delete_file "${KB_FILES[$file]}" "$file" || true
+            delete_file "${KB_FILES[$safe_name]}" "$safe_name" || true
             if upload_file "$full_path"; then
                 uploaded=$((uploaded + 1))
             else
@@ -388,7 +432,7 @@ sync_to_rag() {
         elif file_changed_since "$file" "$last_commit"; then
             # File in KB but changed - delete old and upload new
             log_info "Changed: $file"
-            delete_file "${KB_FILES[$file]}" "$file" || true
+            delete_file "${KB_FILES[$safe_name]}" "$safe_name" || true
             if upload_file "$full_path"; then
                 uploaded=$((uploaded + 1))
             else
