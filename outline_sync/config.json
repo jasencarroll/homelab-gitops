@@ -4,39 +4,39 @@
   "documents": [
     {
       "path": "README.md",
-      "title": "Axiomlayer Overview"
+      "title": "Home"
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "title": "Architecture"
+      "title": "Architecture Overview"
     },
     {
       "path": "docs/INFRASTRUCTURE.md",
-      "title": "Infrastructure"
+      "title": "Infrastructure Components"
     },
     {
       "path": "docs/APPLICATIONS.md",
-      "title": "Applications"
+      "title": "Application Catalog"
     },
     {
       "path": "docs/NETWORKING.md",
-      "title": "Networking"
+      "title": "Networking & TLS"
     },
     {
       "path": "docs/RUNBOOKS.md",
-      "title": "Operational Runbooks"
+      "title": "Runbooks"
     },
     {
       "path": "docs/TROUBLESHOOTING.md",
-      "title": "Troubleshooting"
+      "title": "Troubleshooting Guide"
     },
     {
       "path": "docs/SECRETS.md",
-      "title": "Secrets Management"
+      "title": "Secrets & Sealed Secrets"
     },
     {
       "path": "docs/OUTLINE_SYNC_PLAN.md",
-      "title": "Outline Sync Plan"
+      "title": "Outline Sync"
     }
   ]
 }
