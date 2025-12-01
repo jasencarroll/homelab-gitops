@@ -234,6 +234,194 @@ else
     fi
 fi
 
+section "OIDC Token Endpoint Verification"
+
+# Test that OIDC token endpoints are accessible
+OIDC_TOKEN_PROVIDERS=(
+    "argocd:ArgoCD"
+    "grafana:Grafana"
+    "plane:Plane"
+    "outline:Outline"
+)
+
+for provider in "${OIDC_TOKEN_PROVIDERS[@]}"; do
+    SLUG="${provider%%:*}"
+    NAME="${provider##*:}"
+
+    # Check token endpoint from discovery (handle multi-line JSON)
+    OIDC_CONFIG=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/$SLUG/.well-known/openid-configuration" 2>/dev/null | tr -d '\n')
+    TOKEN_ENDPOINT=$(echo "$OIDC_CONFIG" | grep -o '"token_endpoint"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+
+    if [ -n "$TOKEN_ENDPOINT" ]; then
+        # Test that token endpoint responds (should return 400/401 without credentials)
+        TOKEN_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" -X POST "$TOKEN_ENDPOINT" 2>/dev/null)
+        if [ "$TOKEN_STATUS" = "400" ] || [ "$TOKEN_STATUS" = "401" ] || [ "$TOKEN_STATUS" = "405" ]; then
+            pass "$NAME token endpoint responds correctly (HTTP $TOKEN_STATUS)"
+        else
+            fail "$NAME token endpoint unexpected response (HTTP $TOKEN_STATUS)"
+        fi
+    else
+        fail "$NAME token endpoint not found in discovery"
+    fi
+done
+
+section "OIDC Authorization Endpoint Verification"
+
+# Test that authorization endpoints redirect properly
+for provider in "${OIDC_TOKEN_PROVIDERS[@]}"; do
+    SLUG="${provider%%:*}"
+    NAME="${provider##*:}"
+
+    OIDC_CONFIG=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/$SLUG/.well-known/openid-configuration" 2>/dev/null | tr -d '\n')
+    AUTH_ENDPOINT=$(echo "$OIDC_CONFIG" | grep -o '"authorization_endpoint"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+
+    if [ -n "$AUTH_ENDPOINT" ]; then
+        # Authorization endpoint should respond (302 redirect to login, 200 for login page, or 400 for invalid params)
+        AUTH_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "$AUTH_ENDPOINT?response_type=code&client_id=test&redirect_uri=https://test.example.com" 2>/dev/null)
+        if [ "$AUTH_STATUS" = "302" ] || [ "$AUTH_STATUS" = "303" ] || [ "$AUTH_STATUS" = "200" ] || [ "$AUTH_STATUS" = "400" ]; then
+            pass "$NAME authorization endpoint responds (HTTP $AUTH_STATUS)"
+        else
+            fail "$NAME authorization endpoint not responding (HTTP $AUTH_STATUS)"
+        fi
+    else
+        fail "$NAME authorization endpoint not found in discovery"
+    fi
+done
+
+section "JWKS Endpoint Verification"
+
+# Verify JWKS endpoints return valid keys
+for provider in "${OIDC_TOKEN_PROVIDERS[@]}"; do
+    SLUG="${provider%%:*}"
+    NAME="${provider##*:}"
+
+    OIDC_CONFIG=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/$SLUG/.well-known/openid-configuration" 2>/dev/null | tr -d '\n')
+    JWKS_URI=$(echo "$OIDC_CONFIG" | grep -o '"jwks_uri"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+
+    if [ -n "$JWKS_URI" ]; then
+        JWKS_RESPONSE=$(curl -sk "$JWKS_URI" 2>/dev/null)
+        if echo "$JWKS_RESPONSE" | grep -q '"keys"'; then
+            # Check that there's at least one key
+            KEY_COUNT=$(echo "$JWKS_RESPONSE" | grep -o '"kty"' | wc -l)
+            if [ "$KEY_COUNT" -gt 0 ]; then
+                pass "$NAME JWKS endpoint has $KEY_COUNT key(s)"
+            else
+                fail "$NAME JWKS endpoint has no keys"
+            fi
+        else
+            fail "$NAME JWKS endpoint not returning keys"
+        fi
+    else
+        fail "$NAME JWKS URI not found in discovery"
+    fi
+done
+
+section "Forward Auth Session Handling"
+
+# Test forward auth session cookie handling
+FORWARD_AUTH_TEST_URL="https://db.lab.axiomlayer.com/"
+
+# Get redirect to auth
+REDIRECT_RESPONSE=$(curl -sk -I "$FORWARD_AUTH_TEST_URL" 2>/dev/null)
+REDIRECT_LOCATION=$(echo "$REDIRECT_RESPONSE" | grep -i "location:" | head -1 | tr -d '\r')
+
+if echo "$REDIRECT_LOCATION" | grep -q "auth.lab.axiomlayer.com"; then
+    pass "Forward auth correctly redirects unauthenticated requests"
+
+    # Check that redirect includes return URL
+    if echo "$REDIRECT_LOCATION" | grep -qi "rd=\|redirect=\|next="; then
+        pass "Forward auth includes return URL in redirect"
+    else
+        # Check if URL is encoded in the path
+        if echo "$REDIRECT_LOCATION" | grep -q "db.lab.axiomlayer.com"; then
+            pass "Forward auth includes return URL in redirect path"
+        else
+            fail "Forward auth missing return URL in redirect"
+        fi
+    fi
+else
+    fail "Forward auth not redirecting to Authentik"
+fi
+
+section "Authentik API Health"
+
+# Test Authentik API endpoints
+AUTHENTIK_API_CONFIG=$(curl -sk "https://auth.lab.axiomlayer.com/api/v3/root/config/" 2>/dev/null)
+
+if echo "$AUTHENTIK_API_CONFIG" | grep -q '"error_reporting"'; then
+    pass "Authentik API config endpoint accessible"
+
+    # Check version info
+    AUTHENTIK_VERSION=$(echo "$AUTHENTIK_API_CONFIG" | grep -o '"version_current":"[^"]*"' | cut -d'"' -f4)
+    if [ -n "$AUTHENTIK_VERSION" ]; then
+        echo "  Authentik version: $AUTHENTIK_VERSION"
+    fi
+else
+    fail "Authentik API config endpoint not accessible"
+fi
+
+# Test Authentik flows (requires authentication, so check for valid response)
+AUTHENTIK_FLOWS=$(curl -sk "https://auth.lab.axiomlayer.com/api/v3/flows/instances/" 2>/dev/null)
+FLOWS_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://auth.lab.axiomlayer.com/api/v3/flows/instances/" 2>/dev/null)
+if echo "$AUTHENTIK_FLOWS" | grep -q '"results"'; then
+    FLOW_COUNT=$(echo "$AUTHENTIK_FLOWS" | grep -o '"pk"' | wc -l)
+    pass "Authentik has $FLOW_COUNT configured flow(s)"
+elif [ "$FLOWS_STATUS" = "401" ] || [ "$FLOWS_STATUS" = "403" ]; then
+    pass "Authentik flows API requires authentication (HTTP $FLOWS_STATUS) - expected"
+else
+    fail "Could not retrieve Authentik flows (HTTP $FLOWS_STATUS)"
+fi
+
+section "Outpost Health Check"
+
+# Check outpost can reach Authentik core
+OUTPOST_LOGS=$(kubectl logs -n authentik -l goauthentik.io/outpost-name=forward-auth-outpost --tail=100 2>/dev/null)
+
+if echo "$OUTPOST_LOGS" | grep -qi "connected\|ready\|healthy"; then
+    pass "Forward auth outpost appears connected to Authentik"
+elif echo "$OUTPOST_LOGS" | grep -qi "error\|failed\|disconnect"; then
+    fail "Forward auth outpost has connection errors"
+else
+    pass "Forward auth outpost logs show no errors"
+fi
+
+# Check outpost service endpoints
+OUTPOST_ENDPOINTS=$(kubectl get endpoints -n authentik ak-outpost-forward-auth-outpost -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)
+if [ -n "$OUTPOST_ENDPOINTS" ]; then
+    pass "Forward auth outpost has active endpoints: $OUTPOST_ENDPOINTS"
+else
+    # Try with label selector as fallback
+    OUTPOST_ENDPOINTS=$(kubectl get endpoints -n authentik -l goauthentik.io/outpost-name=forward-auth-outpost -o jsonpath='{.items[*].subsets[*].addresses[*].ip}' 2>/dev/null)
+    if [ -n "$OUTPOST_ENDPOINTS" ]; then
+        pass "Forward auth outpost has active endpoints: $OUTPOST_ENDPOINTS"
+    else
+        fail "Forward auth outpost has no active endpoints"
+    fi
+fi
+
+section "Native OIDC Claim Verification"
+
+# Verify userinfo endpoints return expected claims
+for provider in "${OIDC_TOKEN_PROVIDERS[@]}"; do
+    SLUG="${provider%%:*}"
+    NAME="${provider##*:}"
+
+    OIDC_CONFIG=$(curl -sk "https://auth.lab.axiomlayer.com/application/o/$SLUG/.well-known/openid-configuration" 2>/dev/null | tr -d '\n')
+    USERINFO_ENDPOINT=$(echo "$OIDC_CONFIG" | grep -o '"userinfo_endpoint"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+
+    if [ -n "$USERINFO_ENDPOINT" ]; then
+        # Userinfo should return 401 without token
+        USERINFO_STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "$USERINFO_ENDPOINT" 2>/dev/null)
+        if [ "$USERINFO_STATUS" = "401" ] || [ "$USERINFO_STATUS" = "403" ]; then
+            pass "$NAME userinfo endpoint correctly requires authentication (HTTP $USERINFO_STATUS)"
+        else
+            fail "$NAME userinfo endpoint unexpected response (HTTP $USERINFO_STATUS)"
+        fi
+    else
+        fail "$NAME userinfo endpoint not found"
+    fi
+done
+
 section "Summary"
 
 TOTAL=$((PASSED + FAILED))

@@ -175,6 +175,46 @@ jobs:
       - name: Run auth tests
         run: ./tests/test-auth.sh
 
+      - name: Run application functionality tests
+        run: ./tests/test-app-functionality.sh
+
+      - name: Run monitoring tests
+        run: ./tests/test-monitoring.sh
+
+  # Extended tests - run on schedule or manual trigger
+  extended-tests:
+    name: Extended Tests
+    runs-on: [self-hosted, homelab]
+    needs: [ci-passed]
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            ARCH=$(uname -m)
+            case $ARCH in
+              x86_64) ARCH="amd64" ;;
+              aarch64) ARCH="arm64" ;;
+              armv7l) ARCH="arm" ;;
+            esac
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/${ARCH}/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+          kubectl version --client
+
+      - name: Run backup and restore tests
+        env:
+          RUN_BACKUP_TEST: "true"
+          VERIFY_BACKUP_FILES: "true"
+        run: ./tests/test-backup-restore.sh
+
+      - name: Run network policy tests
+        run: ./tests/test-network-policies.sh
+
   outline-sync:
     name: Outline Sync
     runs-on: [self-hosted, homelab]
