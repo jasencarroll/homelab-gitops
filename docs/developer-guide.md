@@ -8,7 +8,7 @@ You build a containerized app. You push it. The platform does the rest.
 Code → Docker → Push → GitOps → Live
 ```
 
-No kubectl. No SSH. No manual deploys. Just git push and watch it ride.
+No kubectl. No SSH. No manual deploys. Just git push and watch it deploy.
 
 ---
 
