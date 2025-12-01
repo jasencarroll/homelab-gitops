@@ -271,6 +271,11 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "5"
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
 spec:
   project: default
   source:
@@ -284,6 +289,8 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
 ```
 
 Add to `apps/argocd/applications/kustomization.yaml`:
