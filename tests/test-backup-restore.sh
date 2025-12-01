@@ -297,8 +297,8 @@ spec:
   volumes:
   - name: nfs-backup
     nfs:
-      server: 192.168.1.234
-      path: /volume/e8e70d24-82e0-45f1-8ef6-f8ca399ad2d6/.srv/.unifi-drive/Shared_Drive_Example/.data/k8s-backup
+      server: nfs-proxy.nfs-proxy.svc.cluster.local
+      path: /k8s-backup
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
 EOF
