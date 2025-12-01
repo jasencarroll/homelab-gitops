@@ -650,6 +650,185 @@ else
     fail "ClusterIssuer letsencrypt-prod not found"
 fi
 
+section "TLS Certificate Renewal"
+
+# Check all certificates and their renewal status
+ALL_CERTS=$(kubectl get certificates -A -o json 2>/dev/null)
+
+if [ -n "$ALL_CERTS" ]; then
+    CERT_COUNT=$(echo "$ALL_CERTS" | grep -o '"kind":"Certificate"' | wc -l)
+    pass "Found $CERT_COUNT certificate(s) in cluster"
+
+    # Check each certificate's status
+    CERTS_INFO=$(kubectl get certificates -A -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.status.conditions[?(@.type=="Ready")].status}{" "}{.status.notAfter}{"\n"}{end}' 2>/dev/null)
+
+    EXPIRING_SOON=0
+    NOT_READY=0
+    RENEWAL_THRESHOLD_DAYS=30
+
+    while IFS= read -r line; do
+        if [ -z "$line" ]; then continue; fi
+
+        NS=$(echo "$line" | awk '{print $1}')
+        NAME=$(echo "$line" | awk '{print $2}')
+        READY=$(echo "$line" | awk '{print $3}')
+        NOT_AFTER=$(echo "$line" | awk '{print $4}')
+
+        if [ "$READY" != "True" ]; then
+            fail "Certificate $NS/$NAME is not ready"
+            NOT_READY=$((NOT_READY + 1))
+            continue
+        fi
+
+        # Check expiration
+        if [ -n "$NOT_AFTER" ]; then
+            EXPIRY_EPOCH=$(date -d "$NOT_AFTER" +%s 2>/dev/null || echo "0")
+            NOW_EPOCH=$(date +%s)
+            DAYS_REMAINING=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
+
+            if [ "$DAYS_REMAINING" -lt 0 ]; then
+                fail "Certificate $NS/$NAME has EXPIRED"
+            elif [ "$DAYS_REMAINING" -lt 7 ]; then
+                fail "Certificate $NS/$NAME expires in $DAYS_REMAINING days (CRITICAL)"
+                EXPIRING_SOON=$((EXPIRING_SOON + 1))
+            elif [ "$DAYS_REMAINING" -lt "$RENEWAL_THRESHOLD_DAYS" ]; then
+                warn "Certificate $NS/$NAME expires in $DAYS_REMAINING days (renewal pending)"
+                EXPIRING_SOON=$((EXPIRING_SOON + 1))
+            else
+                pass "Certificate $NS/$NAME valid for $DAYS_REMAINING days"
+            fi
+        fi
+    done <<< "$CERTS_INFO"
+
+    if [ "$NOT_READY" -eq 0 ]; then
+        pass "All certificates are in Ready state"
+    fi
+
+    if [ "$EXPIRING_SOON" -eq 0 ]; then
+        pass "No certificates expiring within $RENEWAL_THRESHOLD_DAYS days"
+    fi
+else
+    warn "Could not retrieve certificate information"
+fi
+
+section "TLS Certificate Chain Validation"
+
+# Validate TLS certificate chains for key endpoints
+TLS_ENDPOINTS=(
+    "argocd.lab.axiomlayer.com:443:ArgoCD"
+    "auth.lab.axiomlayer.com:443:Authentik"
+    "grafana.lab.axiomlayer.com:443:Grafana"
+    "docs.lab.axiomlayer.com:443:Outline"
+    "plane.lab.axiomlayer.com:443:Plane"
+)
+
+for endpoint in "${TLS_ENDPOINTS[@]}"; do
+    HOST="${endpoint%%:*}"
+    REST="${endpoint#*:}"
+    PORT="${REST%%:*}"
+    NAME="${REST##*:}"
+
+    # Check TLS connection and certificate validity
+    TLS_CHECK=$(echo | timeout 5 openssl s_client -connect "$HOST:$PORT" -servername "$HOST" 2>/dev/null || echo "failed")
+
+    if echo "$TLS_CHECK" | grep -q "Verify return code: 0"; then
+        pass "$NAME TLS certificate chain is valid"
+    elif echo "$TLS_CHECK" | grep -q "CONNECTED"; then
+        # Connected but certificate chain issues
+        VERIFY_CODE=$(echo "$TLS_CHECK" | grep "Verify return code:" | head -1)
+        if echo "$VERIFY_CODE" | grep -q "self.signed\|unable to get local issuer"; then
+            warn "$NAME TLS uses self-signed or incomplete chain (may be expected for internal)"
+        else
+            warn "$NAME TLS chain issue: $VERIFY_CODE"
+        fi
+    else
+        fail "$NAME TLS connection failed"
+    fi
+
+    # Check certificate expiration via openssl
+    CERT_DATES=$(echo | timeout 5 openssl s_client -connect "$HOST:$PORT" -servername "$HOST" 2>/dev/null | openssl x509 -noout -dates 2>/dev/null || echo "")
+
+    if [ -n "$CERT_DATES" ]; then
+        NOT_AFTER_DATE=$(echo "$CERT_DATES" | grep "notAfter" | cut -d= -f2)
+        if [ -n "$NOT_AFTER_DATE" ]; then
+            EXPIRY_EPOCH=$(date -d "$NOT_AFTER_DATE" +%s 2>/dev/null || echo "0")
+            NOW_EPOCH=$(date +%s)
+            DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
+
+            if [ "$DAYS_LEFT" -lt 7 ]; then
+                fail "$NAME certificate expires in $DAYS_LEFT days (URGENT)"
+            elif [ "$DAYS_LEFT" -lt 30 ]; then
+                warn "$NAME certificate expires in $DAYS_LEFT days"
+            fi
+        fi
+    fi
+done
+
+section "Cert-Manager Health"
+
+# Check cert-manager controller logs for errors
+CM_LOGS=$(kubectl logs -n cert-manager -l app.kubernetes.io/name=cert-manager --tail=100 2>/dev/null)
+
+if echo "$CM_LOGS" | grep -qi "error.*acme\|failed.*challenge\|rate.*limit"; then
+    ACME_ERRORS=$(echo "$CM_LOGS" | grep -ci "error.*acme\|failed.*challenge" || echo "0")
+    if [ "$ACME_ERRORS" -gt 20 ]; then
+        fail "cert-manager has $ACME_ERRORS recent ACME errors (excessive)"
+    else
+        # Transient ACME errors are common during certificate renewal
+        warn "cert-manager has $ACME_ERRORS recent ACME errors (may be transient)"
+        pass "cert-manager ACME error count within acceptable threshold"
+    fi
+else
+    pass "cert-manager has no recent ACME errors"
+fi
+
+# Check for rate limiting
+if echo "$CM_LOGS" | grep -qi "rate.*limit\|too many"; then
+    fail "cert-manager may be rate limited by Let's Encrypt"
+else
+    pass "No rate limiting detected"
+fi
+
+# Check CertificateRequests status
+PENDING_REQUESTS=$(kubectl get certificaterequests -A -o jsonpath='{range .items[?(@.status.conditions[0].status!="True")]}{.metadata.namespace}/{.metadata.name}{" "}{end}' 2>/dev/null)
+
+if [ -z "$PENDING_REQUESTS" ] || [ "$PENDING_REQUESTS" = " " ]; then
+    pass "No pending CertificateRequests"
+else
+    warn "Pending CertificateRequests: $PENDING_REQUESTS"
+fi
+
+# Check for failed Orders
+FAILED_ORDERS=$(kubectl get orders -A -o jsonpath='{range .items[?(@.status.state=="invalid")]}{.metadata.namespace}/{.metadata.name}{" "}{end}' 2>/dev/null)
+
+if [ -z "$FAILED_ORDERS" ] || [ "$FAILED_ORDERS" = " " ]; then
+    pass "No failed ACME Orders"
+else
+    fail "Failed ACME Orders: $FAILED_ORDERS"
+fi
+
+# Check DNS-01 challenge capability
+CHALLENGES_OUTPUT=$(kubectl get challenges -A -o jsonpath='{range .items[*]}{.spec.type}{"\n"}{end}' 2>/dev/null || echo "")
+DNS_CHALLENGES=$(echo "$CHALLENGES_OUTPUT" | grep -c "DNS-01" 2>/dev/null || echo "0")
+HTTP_CHALLENGES=$(echo "$CHALLENGES_OUTPUT" | grep -c "HTTP-01" 2>/dev/null || echo "0")
+
+# Ensure variables are valid integers (remove any whitespace/newlines)
+DNS_CHALLENGES=$(echo "$DNS_CHALLENGES" | tr -d '[:space:]')
+HTTP_CHALLENGES=$(echo "$HTTP_CHALLENGES" | tr -d '[:space:]')
+DNS_CHALLENGES=${DNS_CHALLENGES:-0}
+HTTP_CHALLENGES=${HTTP_CHALLENGES:-0}
+
+# Validate they are numbers
+if ! [[ "$DNS_CHALLENGES" =~ ^[0-9]+$ ]]; then DNS_CHALLENGES=0; fi
+if ! [[ "$HTTP_CHALLENGES" =~ ^[0-9]+$ ]]; then HTTP_CHALLENGES=0; fi
+
+ACTIVE_CHALLENGES=$((DNS_CHALLENGES + HTTP_CHALLENGES))
+if [ "$ACTIVE_CHALLENGES" -eq 0 ]; then
+    pass "No active ACME challenges (certificates are stable)"
+else
+    warn "$ACTIVE_CHALLENGES active ACME challenge(s) in progress"
+fi
+
 section "Summary"
 
 TOTAL=$((PASSED + FAILED))
