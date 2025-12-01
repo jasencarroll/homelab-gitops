@@ -130,7 +130,7 @@ metadata:
   namespace: myapp
   labels:
     app.kubernetes.io/name: myapp
-    app.kubernetes.io/component: server
+    app.kubernetes.io/component: service
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 spec:
