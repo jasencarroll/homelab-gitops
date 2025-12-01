@@ -3,8 +3,13 @@ cd /home/jasen/axiomlayer
 export KUBECONFIG=/home/jasen/.kube/config
 POD=$(kubectl get pods -n open-webui -l app.kubernetes.io/name=open-webui -o jsonpath='{.items[0].metadata.name}')
 
-API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjkwMjFkMGI4LWI3NWYtNDRiYS1hOWU3LTFmZTkwMDc2Y2EyNiIsImV4cCI6MTc2Njg3NTk5NCwianRpIjoiZDRjN2VjOWUtMmRkYy00OGY0LThmYTctNTY3YzBhZTRiMWIxIn0.ylWg_yiAP4lKiv5DkYBXX4b6oOU1HBSW4fpTiVLc-p8"
-KB_ID="7bb980fa-2963-4b42-a037-f1202a8a415b"
+# Load from environment or .env file
+if [ -f .env ]; then
+    source <(grep -E '^(OPEN_WEBUI_API_KEY|OPEN_WEBUI_KNOWLEDGE_ID)=' .env)
+fi
+
+API_KEY="${OPEN_WEBUI_API_KEY:?Error: OPEN_WEBUI_API_KEY not set}"
+KB_ID="${OPEN_WEBUI_KNOWLEDGE_ID:?Error: OPEN_WEBUI_KNOWLEDGE_ID not set}"
 
 echo "Using pod: $POD"
 COUNT=0
