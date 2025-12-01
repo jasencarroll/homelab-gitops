@@ -2,7 +2,8 @@
 # Smoke tests for homelab infrastructure
 # Run: ./tests/smoke-test.sh
 
-set -e
+# Note: Do not use 'set -e' as it causes early exit on non-zero returns
+# from commands like grep when no matches are found, even when handled
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 
