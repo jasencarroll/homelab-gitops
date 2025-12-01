@@ -14,6 +14,7 @@
 #   OPEN_WEBUI_URL - Base URL (default: internal cluster URL)
 #   LAST_SYNC_COMMIT - Previous sync commit SHA (default: uses marker file or HEAD~1)
 #   FORCE_FULL_SYNC - Set to "true" to sync all files regardless of changes
+#   CLEANUP_LEGACY_BASENAME - If "true", purge old KB entries stored by basename
 
 set -euo pipefail
 
@@ -52,8 +53,9 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 
 # Associative arrays to track KB state
-declare -A KB_FILES_BY_NAME  # filename -> file_id
+declare -A KB_FILES_BY_PATH  # path-like name in KB -> file_id
 declare -A KB_FILES_BY_HASH  # hash -> file_id
+declare -a KB_ENTRIES        # raw entries as "id|name"
 
 # Check required environment variables
 check_requirements() {
@@ -105,8 +107,10 @@ load_kb_files() {
             hash=$(echo "$line" | jq -r '.hash')
 
             if [[ -n "$file_id" && "$file_id" != "null" ]]; then
-                KB_FILES_BY_NAME["$name"]="$file_id"
+                # Track by the name Open WebUI stores (prefer meta.name if present)
+                KB_FILES_BY_PATH["$name"]="$file_id"
                 KB_FILES_BY_HASH["$hash"]="$file_id"
+                KB_ENTRIES+=("$file_id|$name")
                 count=$((count + 1))
             fi
         done < <(echo "$response" | jq -c '.files[]' 2>/dev/null)
@@ -215,9 +219,9 @@ upload_file() {
     local filename
     filename=$(basename "$file_path")
 
-    # Check if file with same name exists - delete it first
-    if [[ -n "${KB_FILES_BY_NAME[$filename]:-}" ]]; then
-        delete_file "${KB_FILES_BY_NAME[$filename]}" "$filename" || true
+    # If a file with the same path-like name exists in KB, delete it first (update)
+    if [[ -n "${KB_FILES_BY_PATH[$relative_path]:-}" ]]; then
+        delete_file "${KB_FILES_BY_PATH[$relative_path]}" "$relative_path" || true
     fi
 
     log_info "  Uploading: $relative_path"
@@ -227,7 +231,7 @@ upload_file() {
     response=$(curl -s -X POST \
         -H "Authorization: Bearer $OPEN_WEBUI_API_KEY" \
         -H "Accept: application/json" \
-        -F "file=@$file_path" \
+        -F "file=@$file_path;filename=$relative_path" \
         "$OPEN_WEBUI_URL/api/v1/files/" 2>&1) || {
         log_error "  Failed to upload $relative_path"
         return 1
@@ -256,7 +260,7 @@ upload_file() {
     log_info "  ✓ Added to knowledge base (ID: ${file_id:0:8}...)"
 
     # Update tracking
-    KB_FILES_BY_NAME["$filename"]="$file_id"
+    KB_FILES_BY_PATH["$relative_path"]="$file_id"
 
     return 0
 }
@@ -268,6 +272,62 @@ get_all_matching_files() {
     for pattern in "${SYNC_PATTERNS[@]}"; do
         find . -path "./$pattern" -type f 2>/dev/null | sed 's|^\./||' || true
     done | sort -u
+}
+
+# Cleanup legacy KB entries that used only basenames (pre-path fix)
+# Logic: For KB entries whose name contains no '/', delete them if they do not correspond
+# to an actual top-level file in the repo but there are matching files with that basename
+# in nested paths. This preserves legitimate top-level files (e.g., README.md).
+cleanup_legacy_basename_entries() {
+    [[ "${CLEANUP_LEGACY_BASENAME:-false}" == "true" ]] || return 0
+
+    log_info "Cleanup: scanning for legacy basename-only KB entries..."
+
+    declare -A REPO_TOPLEVEL_SET=()
+    declare -A REPO_BASENAME_COUNT=()
+
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        local base
+        base=$(basename "$f")
+        REPO_BASENAME_COUNT["$base"]=$(( ${REPO_BASENAME_COUNT["$base"]:-0} + 1 ))
+        # Top-level file has no '/'
+        if [[ "$f" != */* ]]; then
+            REPO_TOPLEVEL_SET["$f"]=1
+        fi
+    done < <(get_all_matching_files)
+
+    local purged=0 kept=0 checked=0
+    for entry in "${KB_ENTRIES[@]}"; do
+        local id name
+        id=${entry%%|*}
+        name=${entry#*|}
+        checked=$((checked + 1))
+
+        # Only consider names without path separators
+        if [[ "$name" == */* ]]; then
+            kept=$((kept + 1))
+            continue
+        fi
+
+        # Preserve if an actual top-level file exists with this name
+        if [[ -n "${REPO_TOPLEVEL_SET["$name"]:-}" ]]; then
+            kept=$((kept + 1))
+            continue
+        fi
+
+        # If the basename exists in repo but only in nested paths -> purge legacy entry
+        if [[ ${REPO_BASENAME_COUNT["$name"]:-0} -gt 0 ]]; then
+            log_info "  Purging legacy basename entry: $name (ID: ${id:0:8}...)"
+            delete_file "$id" "$name" || true
+            unset "KB_FILES_BY_PATH[$name]"
+            purged=$((purged + 1))
+        else
+            kept=$((kept + 1))
+        fi
+    done
+
+    log_info "Cleanup summary: checked=$checked, purged=$purged, kept=$kept"
 }
 
 # Check if file changed since last sync
@@ -291,8 +351,11 @@ sync_to_rag() {
 
     # Load existing KB state
     load_kb_files
-    local kb_file_count=${#KB_FILES_BY_NAME[@]}
+    local kb_file_count=${#KB_FILES_BY_PATH[@]}
     echo ""
+
+    # Optional: purge legacy basename-only entries
+    cleanup_legacy_basename_entries
 
     # Get last sync point
     local last_commit
@@ -364,7 +427,7 @@ sync_to_rag() {
         # 1. If file NOT in KB -> upload it
         # 2. If file IS in KB -> only upload if changed since last sync (or force sync)
         local file_in_kb=false
-        if [[ -n "${KB_FILES_BY_NAME[$filename]:-}" ]]; then
+        if [[ -n "${KB_FILES_BY_PATH[$file]:-}" ]]; then
             file_in_kb=true
         fi
 
