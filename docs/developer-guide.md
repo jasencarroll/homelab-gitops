@@ -29,9 +29,13 @@ CMD ["node", "server.js"]
 Build and push to GitHub Container Registry:
 
 ```bash
-docker build -t ghcr.io/jasencdev/myapp:latest .
-docker push ghcr.io/jasencdev/myapp:latest
+# Use semantic versioning or git commit SHA for image tags
+VERSION=$(git rev-parse --short HEAD)
+docker build -t ghcr.io/jasencdev/myapp:${VERSION} .
+docker push ghcr.io/jasencdev/myapp:${VERSION}
 ```
+
+> **Best Practice:** Always use immutable, versioned tags (semantic versions like `v1.0.0` or commit SHAs) instead of `latest`. This enables proper rollbacks through git history and makes it clear which version is running in the cluster.
 
 ### 2. Create the Manifests
 
@@ -93,7 +97,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: myapp
-          image: ghcr.io/jasencdev/myapp:latest
+          image: ghcr.io/jasencdev/myapp:v1.0.0  # Use semantic version or commit SHA
           ports:
             - containerPort: 3000
           securityContext:
@@ -429,19 +433,40 @@ env:
 
 ## Updating Your App
 
-1. Build new container version
-2. Push to registry with new tag
-3. Update image tag in deployment.yaml
-4. Commit and push
-5. ArgoCD syncs the change
-6. Rolling update, zero downtime
+The GitOps workflow for updates:
 
-Or use `latest` tag and restart:
+1. Build new container version with a new tag
+2. Push to registry with the versioned tag
+3. Update image tag in `deployment.yaml`
+4. Commit and push to git
+5. ArgoCD detects the change and syncs
+6. Rolling update with zero downtime
 
-> **Note:** Using `kubectl rollout restart` requires direct cluster access and bypasses the GitOps workflow. This approach is not aligned with the platform's philosophy ("No kubectl. No SSH. No manual deploys. Just git push and watch it ride."). The recommended GitOps-friendly method is to update the image tag in your manifest and push the change, letting ArgoCD handle the rollout.
+Example update workflow:
+
 ```bash
-kubectl rollout restart deployment/myapp -n myapp
+# Build and push with new version
+VERSION=v1.1.0
+docker build -t ghcr.io/jasencdev/myapp:${VERSION} .
+docker push ghcr.io/jasencdev/myapp:${VERSION}
+
+# Update the manifest (use your preferred editor)
+# Change: image: ghcr.io/jasencdev/myapp:v1.0.0
+# To:     image: ghcr.io/jasencdev/myapp:v1.1.0
+
+# Commit and push
+git add apps/myapp/deployment.yaml
+git commit -m "Update myapp to ${VERSION}"
+git push
 ```
+
+ArgoCD automatically detects the change and performs a rolling update.
+
+> **Why versioned tags matter:**
+> - **Traceability**: Git history shows exactly which version was deployed and when
+> - **Rollback**: Revert to any previous version by reverting the git commit
+> - **Reproducibility**: Any commit represents an exact, reproducible state of the cluster
+> - **Auditability**: Clear record of who deployed what and when
 
 ---
 
