@@ -181,12 +181,12 @@ jobs:
       - name: Run monitoring tests
         run: ./tests/test-monitoring.sh
 
-  # Extended tests - run on schedule or manual trigger
+  # Extended tests - run on main push, schedule, or manual trigger
   extended-tests:
     name: Extended Tests
     runs-on: [self-hosted, homelab]
     needs: [ci-passed]
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
