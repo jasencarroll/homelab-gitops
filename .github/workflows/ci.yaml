@@ -197,6 +197,56 @@ jobs:
       - name: Run monitoring tests
         run: ./tests/test-monitoring.sh
 
+  # Popeye cluster scan - runs on main push to check cluster health score
+  popeye-scan:
+    name: Popeye Cluster Scan
+    runs-on: [self-hosted, homelab]
+    needs: [ci-passed]
+    if: always() && needs.ci-passed.result == 'success' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Install popeye
+        run: |
+          if ! command -v popeye &> /dev/null; then
+            ARCH=$(uname -m)
+            case $ARCH in
+              x86_64) ARCH="amd64" ;;
+              aarch64) ARCH="arm64" ;;
+              *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+            esac
+            POPEYE_VERSION="0.21.3"
+            curl -sSL -o /tmp/popeye.tar.gz "https://github.com/derailed/popeye/releases/download/v${POPEYE_VERSION}/popeye_Linux_${ARCH}.tar.gz"
+            tar -xzf /tmp/popeye.tar.gz -C /tmp
+            sudo mv /tmp/popeye /usr/local/bin/
+            rm /tmp/popeye.tar.gz
+          fi
+          popeye version
+
+      - name: Run Popeye scan
+        run: |
+          # Run popeye and capture score
+          popeye -A --force-exit-zero --format json > /tmp/popeye-report.json 2>/dev/null || true
+
+          # Extract and display score
+          SCORE=$(jq -r '.score' /tmp/popeye-report.json 2>/dev/null || echo "0")
+          echo "Cluster health score: ${SCORE}%"
+
+          # Show summary of issues
+          echo ""
+          echo "=== Issue Summary ==="
+          jq -r '.popeye.sanitizers[] | select(.issues != null) | "\(.sanitizer): \(.issues | length) issues"' /tmp/popeye-report.json 2>/dev/null || true
+
+          # Fail if score drops below threshold (currently 75 to allow some wiggle room)
+          THRESHOLD=75
+          if [ "${SCORE}" -lt "${THRESHOLD}" ]; then
+            echo ""
+            echo "ERROR: Cluster health score ${SCORE}% is below threshold of ${THRESHOLD}%"
+            echo "Run 'popeye -A' locally for full report"
+            exit 1
+          fi
+
+          echo ""
+          echo "Cluster health score ${SCORE}% meets threshold of ${THRESHOLD}%"
+
   # Extended tests - run on main push, schedule, or manual trigger
   extended-tests:
     name: Extended Tests
