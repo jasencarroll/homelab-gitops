@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'  # Trigger on version tags for RAG/Outline sync
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -365,15 +367,23 @@ jobs:
   outline-sync:
     name: Outline Sync
     runs-on: [self-hosted, homelab]
-    needs: [ci-passed]
-    if: always() && needs.ci-passed.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Only run on version tag pushes (v*)
+    if: startsWith(github.ref, 'refs/tags/v')
     env:
       OUTLINE_API_TOKEN: ${{ secrets.OUTLINE_API_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Need full history for tag comparison
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Sync docs to Outline
+        env:
+          OUTLINE_VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           if [ -z "$OUTLINE_API_TOKEN" ]; then
             echo "OUTLINE_API_TOKEN not set; skipping Outline sync."
@@ -384,14 +394,20 @@ jobs:
   rag-sync:
     name: RAG Sync
     runs-on: [self-hosted, homelab]
-    needs: [ci-passed]
-    if: always() && needs.ci-passed.result == 'success' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Only run on version tag pushes (v*)
+    if: startsWith(github.ref, 'refs/tags/v')
     env:
       OPEN_WEBUI_API_KEY: ${{ secrets.OPEN_WEBUI_API_KEY }}
       OPEN_WEBUI_KNOWLEDGE_ID: ${{ secrets.OPEN_WEBUI_KNOWLEDGE_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Need full history for tag comparison
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Install kubectl
         run: |
@@ -415,6 +431,8 @@ jobs:
           kubectl version --client
 
       - name: Sync repo to Open WebUI RAG
+        env:
+          RAG_VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           if [ -z "$OPEN_WEBUI_API_KEY" ]; then
             echo "OPEN_WEBUI_API_KEY not set; skipping RAG sync."
