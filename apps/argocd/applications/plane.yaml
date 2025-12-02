@@ -47,6 +47,15 @@ spec:
           volumeSize: 10Gi
           storageClass: longhorn
 
+        api:
+          memoryRequest: 200Mi
+
+        beatworker:
+          memoryRequest: 200Mi
+
+        live:
+          memoryRequest: 200Mi
+
         worker:
           memoryLimit: 2000Mi
           memoryRequest: 500Mi

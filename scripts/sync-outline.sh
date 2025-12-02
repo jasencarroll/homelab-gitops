@@ -1,7 +1,7 @@
 #!/bin/bash
 # sync-outline.sh - Sync markdown docs to Outline wiki
 #
-# Uses git to detect changed files and syncs only what's needed to Outline.
+# Tag-based sync: Only runs on git tag pushes, compares against previous tag.
 # Maintains state in outline_sync/state.json to track document IDs.
 #
 # Required environment variables:
@@ -9,7 +9,7 @@
 #
 # Optional environment variables:
 #   OUTLINE_API_URL - Base API URL (default: https://docs.lab.axiomlayer.com/api)
-#   LAST_SYNC_COMMIT - Previous sync commit SHA
+#   OUTLINE_VERSION - Version tag (default: from git describe)
 #   FORCE_FULL_SYNC - Set to "true" to sync all files
 
 set -euo pipefail
@@ -18,8 +18,10 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CONFIG_FILE="$REPO_ROOT/outline_sync/config.json"
 STATE_FILE="$REPO_ROOT/outline_sync/state.json"
-SYNC_MARKER_FILE="$REPO_ROOT/.outline-sync-commit"
 OUTLINE_API_URL="${OUTLINE_API_URL:-https://docs.lab.axiomlayer.com/api}"
+
+# Get version from env or git tag
+OUTLINE_VERSION="${OUTLINE_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo 'unversioned')}"
 
 # Colors
 RED='\033[0;31m'
@@ -268,28 +270,15 @@ get_configured_docs() {
     jq -r '.documents[].path' "$CONFIG_FILE" 2>/dev/null
 }
 
-# Get the last synced commit
-get_last_sync_commit() {
-    if [[ -n "${LAST_SYNC_COMMIT:-}" ]]; then
-        echo "$LAST_SYNC_COMMIT"
-    elif [[ -f "$SYNC_MARKER_FILE" ]]; then
-        cat "$SYNC_MARKER_FILE"
-    else
-        git rev-parse HEAD~1 2>/dev/null || echo ""
-    fi
+# Get the previous tag for comparison
+get_previous_tag() {
+    # Find the tag before the current one
+    git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""
 }
 
-# Save current commit as last synced
-save_sync_commit() {
-    local commit
-    commit=$(git rev-parse HEAD)
-    echo "$commit" > "$SYNC_MARKER_FILE"
-    log_info "Saved sync marker: $commit"
-}
-
-# Get changed files since last sync
+# Get changed docs since previous tag
 get_changed_docs() {
-    local last_commit="$1"
+    local prev_tag="$1"
 
     cd "$REPO_ROOT" || return
 
@@ -297,15 +286,15 @@ get_changed_docs() {
     local configured_docs
     configured_docs=$(get_configured_docs)
 
-    if [[ -z "$last_commit" ]] || [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
+    if [[ -z "$prev_tag" ]] || [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
         log_info "Full sync mode - syncing all configured documents" >&2
         echo "$configured_docs"
     else
-        log_info "Incremental sync - finding changes since ${last_commit:0:8}..." >&2
+        log_info "Incremental sync - finding changes since $prev_tag" >&2
 
-        # Get changed files
+        # Get changed files since previous tag
         local changed_files
-        changed_files=$(git diff --name-only "$last_commit" HEAD 2>/dev/null || echo "")
+        changed_files=$(git diff --name-only "$prev_tag" HEAD 2>/dev/null || echo "")
 
         # Filter to only configured docs that changed
         for doc in $configured_docs; do
@@ -318,7 +307,8 @@ get_changed_docs() {
 
 # Main sync function
 sync_to_outline() {
-    log_info "Starting Outline sync"
+    log_info "Starting Outline sync (tag-based)"
+    log_info "Version: $OUTLINE_VERSION"
     log_info "API URL: $OUTLINE_API_URL"
     log_info "Repository root: $REPO_ROOT"
     echo ""
@@ -327,11 +317,16 @@ sync_to_outline() {
     local collection_id
     collection_id=$(get_collection_id)
     log_info "Collection ID: $collection_id"
-    echo ""
 
-    # Get last sync commit
-    local last_commit
-    last_commit=$(get_last_sync_commit)
+    # Get previous tag for comparison
+    local prev_tag
+    prev_tag=$(get_previous_tag)
+    if [[ -n "$prev_tag" ]]; then
+        log_info "Previous tag: $prev_tag"
+    else
+        log_info "No previous tag found (first release)"
+    fi
+    echo ""
 
     local synced=0
     local skipped=0
@@ -346,20 +341,20 @@ sync_to_outline() {
         else
             failed=$((failed + 1))
         fi
-    done < <(get_changed_docs "$last_commit")
+    done < <(get_changed_docs "$prev_tag")
 
     echo ""
     log_info "===== Sync Summary ====="
-    log_info "  Synced: $synced"
-    log_info "  Failed: $failed"
+    log_info "  Version: $OUTLINE_VERSION"
+    log_info "  Synced:  $synced"
+    log_info "  Failed:  $failed"
 
-    # Save sync marker on success
-    if [[ $failed -eq 0 ]]; then
-        save_sync_commit
-    else
-        log_warn "Sync completed with errors - marker not updated"
+    if [[ $failed -gt 0 ]]; then
+        log_warn "Sync completed with errors"
         exit 1
     fi
+
+    log_info "Sync completed successfully"
 }
 
 # Run

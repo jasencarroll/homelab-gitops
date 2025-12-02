@@ -1,43 +1,27 @@
 #!/bin/bash
 # sync-rag.sh - Sync repository files to Open WebUI RAG knowledge base
 #
-# Usage: ./sync-rag.sh
+# Tag-based versioned sync: Files are uploaded with version suffix (e.g., README__v1.0.0.md)
+# This avoids ChromaDB duplicate embedding issues and provides version history.
 #
-# Uses git to detect changed files and intelligently syncs only what's needed:
-# - New files: Upload and add to knowledge base
-# - Changed files: Delete old version, upload new, add to knowledge base
-# - Unchanged files: Skip
-#
-# For a complete reset/cleanup, use: ./scripts/run-rag-sync-manual.sh
+# Usage: RAG_VERSION=v1.0.0 ./sync-rag.sh
 #
 # Required environment variables:
 #   OPEN_WEBUI_API_KEY - API key from Open WebUI Settings > Account
 #   OPEN_WEBUI_KNOWLEDGE_ID - Knowledge base ID to sync files to
 #
 # Optional environment variables:
-#   LAST_SYNC_COMMIT - Previous sync commit SHA (default: uses marker file or HEAD~1)
+#   RAG_VERSION - Version tag (default: from git describe or 'unversioned')
 #   FORCE_FULL_SYNC - Set to "true" to sync all files regardless of changes
 
 set -euo pipefail
 
 # Configuration
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-SYNC_MARKER_FILE="$REPO_ROOT/.rag-sync-commit"
 export KUBECONFIG="${KUBECONFIG:-/home/jasen/.kube/config}"
 
-# Files to skip entirely (Open WebUI embedding bugs cause "duplicate content" errors)
-# These files are NOT synced to the KB - they will be added manually or investigated later
-SKIP_FILES=(
-    "README.md"
-    "docs/RAG_KNOWLEDGE_BASE.md"
-    "infrastructure/alertmanager/ingress.yaml"
-    "apps/dashboard/configmap.yaml"
-    ".kube-linter.yaml"
-    ".pre-commit-config.yaml"
-    ".yamllint.yaml"
-    "CLAUDE.md"
-    "CONTRIBUTING.md"
-)
+# Get version from env or git tag
+RAG_VERSION="${RAG_VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo 'unversioned')}"
 
 # Colors
 RED='\033[0;31m'
@@ -49,78 +33,24 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Check if a file should be skipped entirely
-should_skip() {
-    local file="$1"
-    for skip in "${SKIP_FILES[@]}"; do
-        if [[ "$file" == "$skip" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Convert path to safe filename (replace / with __)
-# Open WebUI strips directory paths from filenames, so we encode the path
-# Example: apps/dashboard/configmap.yaml -> apps__dashboard__configmap.yaml
-path_to_safe_name() {
-    echo "$1" | sed 's|/|__|g'
-}
-
 # Parse command line arguments
 for arg in "$@"; do
     case $arg in
         --help|-h)
-            echo "Usage: $0"
+            echo "Usage: RAG_VERSION=v1.0.0 $0"
             echo ""
-            echo "Incrementally syncs repository files to Open WebUI RAG knowledge base."
-            echo "For a complete reset/cleanup, use: ./scripts/run-rag-sync-manual.sh"
+            echo "Tag-based versioned sync to Open WebUI RAG knowledge base."
+            echo "Files are uploaded with version suffix (e.g., README__v1.0.0.md)"
             echo ""
             echo "Environment variables:"
             echo "  OPEN_WEBUI_API_KEY      - API key (required)"
             echo "  OPEN_WEBUI_KNOWLEDGE_ID - Knowledge base ID (required)"
+            echo "  RAG_VERSION             - Version tag (default: from git describe)"
             echo "  FORCE_FULL_SYNC         - Set to 'true' to sync all files"
             exit 0
             ;;
     esac
 done
-
-# Check required environment variables
-check_requirements() {
-    local missing=0
-
-    if [[ -z "${OPEN_WEBUI_API_KEY:-}" ]]; then
-        log_error "OPEN_WEBUI_API_KEY is not set"
-        missing=1
-    fi
-
-    if [[ -z "${OPEN_WEBUI_KNOWLEDGE_ID:-}" ]]; then
-        log_error "OPEN_WEBUI_KNOWLEDGE_ID is not set"
-        missing=1
-    fi
-
-    if ! command -v jq &> /dev/null; then
-        log_error "jq is required but not installed"
-        missing=1
-    fi
-
-    if ! command -v kubectl &> /dev/null; then
-        log_error "kubectl is required but not installed"
-        missing=1
-    fi
-
-    if [[ $missing -eq 1 ]]; then
-        echo ""
-        echo "Required environment variables:"
-        echo "  OPEN_WEBUI_API_KEY      - API key from Open WebUI Settings > Account"
-        echo "  OPEN_WEBUI_KNOWLEDGE_ID - Knowledge base ID (from URL when viewing knowledge base)"
-        echo ""
-        echo "Optional:"
-        echo "  LAST_SYNC_COMMIT        - Previous sync commit SHA"
-        echo "  FORCE_FULL_SYNC         - Set to 'true' to sync all files"
-        exit 1
-    fi
-}
 
 # Get Open WebUI pod name
 get_pod() {
@@ -128,7 +58,6 @@ get_pod() {
 }
 
 # Helper to call Open WebUI API from within the cluster
-# Uses bash -c to properly handle JWT tokens with special characters
 api_call() {
     local method="$1"
     local endpoint="$2"
@@ -143,23 +72,14 @@ api_call() {
     fi
 }
 
-# Get the last synced commit
-get_last_sync_commit() {
-    if [[ -n "${LAST_SYNC_COMMIT:-}" ]]; then
-        echo "$LAST_SYNC_COMMIT"
-    elif [[ -f "$SYNC_MARKER_FILE" ]]; then
-        cat "$SYNC_MARKER_FILE"
-    else
-        git rev-parse HEAD~1 2>/dev/null || echo ""
-    fi
-}
-
-# Save current commit as last synced
-save_sync_commit() {
-    local commit
-    commit=$(git rev-parse HEAD)
-    echo "$commit" > "$SYNC_MARKER_FILE"
-    log_info "Saved sync marker: $commit"
+# Convert path to versioned safe filename
+# Example: apps/dashboard/configmap.yaml v1.0.0 -> apps__dashboard__configmap__v1.0.0.yaml
+path_to_versioned_name() {
+    local path="$1"
+    local version="$2"
+    local base="${path%.*}"
+    local ext="${path##*.}"
+    echo "${base}__${version}.${ext}" | sed 's|/|__|g'
 }
 
 # Check if file should be excluded
@@ -174,50 +94,52 @@ is_excluded() {
     return 1
 }
 
-# Check if file changed since last sync
-file_changed_since() {
-    local file="$1"
-    local last_commit="$2"
-    [[ -z "$last_commit" ]] && return 0
-    git diff --name-only "$last_commit" HEAD -- "$file" 2>/dev/null | grep -q .
+# Get the previous tag for comparison
+get_previous_tag() {
+    # Find the tag before the current one
+    git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo ""
 }
 
-# Delete a file from Open WebUI
-delete_file() {
-    local file_id="$1"
-    local filename="$2"
+# Get all files matching sync patterns
+get_all_matching_files() {
+    cd "$REPO_ROOT" || return 1
+    find . -type f \( -name "*.md" -o -name "*.yaml" \) \
+        ! -path "./.git/*" \
+        ! -name "*sealed-secret*" \
+        ! -name "*.env*" \
+        ! -name "*AGENTS.md*" \
+        | sed 's|^\./||' | sort
+}
 
-    log_info "  Deleting: $filename (ID: ${file_id:0:8}...)"
-    local response
-    response=$(api_call DELETE "/api/v1/files/$file_id")
+# Get files changed since previous tag
+get_changed_files() {
+    local prev_tag="$1"
+    cd "$REPO_ROOT" || return 1
 
-    # Check for success - either .id in response or success message
-    if echo "$response" | jq -e '.id' > /dev/null 2>&1; then
-        return 0
-    elif echo "$response" | jq -e '.message == "File deleted successfully"' > /dev/null 2>&1; then
-        return 0
+    if [[ -z "$prev_tag" ]] || [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
+        # First release or force sync - sync all files
+        log_info "Full sync mode - syncing all matching files" >&2
+        get_all_matching_files
     else
-        log_warn "  Delete may have failed: $response"
-        return 1
+        # Get files changed since previous tag
+        log_info "Incremental sync - changes since $prev_tag" >&2
+        git diff --name-only "$prev_tag" HEAD -- '*.md' '*.yaml' 2>/dev/null | \
+            grep -v sealed-secret | grep -v '.env' | grep -v 'AGENTS.md' || true
     fi
 }
 
-# Upload a file and add to KB (using same method as manual script)
-# Uses piped bash to properly handle JWT tokens with special characters
+# Upload a file with versioned name
 upload_file() {
     local file_path="$1"
-    local relative_path="${file_path#$REPO_ROOT/}"
-    local safe_name
-    safe_name=$(path_to_safe_name "$relative_path")
+    local versioned_name="$2"
 
     # Copy file to pod
     kubectl cp "$file_path" "open-webui/$POD:/tmp/sync-file" 2>/dev/null
 
-    # Upload and add to KB inside the pod (pipe through bash for proper JWT handling)
-    # Use safe_name (with __ instead of /) to preserve path info since Open WebUI strips paths
+    # Upload and add to KB inside the pod
     local result
     result=$(cat <<UPLOAD_SCRIPT | kubectl exec -i -n open-webui "$POD" -- bash
-RESP=\$(curl -s -X POST -H 'Authorization: Bearer $OPEN_WEBUI_API_KEY' -F "file=@/tmp/sync-file;filename=$safe_name" http://localhost:8080/api/v1/files/)
+RESP=\$(curl -s -X POST -H 'Authorization: Bearer $OPEN_WEBUI_API_KEY' -F "file=@/tmp/sync-file;filename=$versioned_name" http://localhost:8080/api/v1/files/)
 FID=\$(echo "\$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
 if [ -n "\$FID" ] && [ "\$FID" != "None" ]; then
     ADD_RESP=\$(curl -s -X POST -H 'Authorization: Bearer $OPEN_WEBUI_API_KEY' -H 'Content-Type: application/json' -d "{\"file_id\":\"\$FID\"}" 'http://localhost:8080/api/v1/knowledge/$OPEN_WEBUI_KNOWLEDGE_ID/file/add')
@@ -237,68 +159,24 @@ UPLOAD_SCRIPT
 
     case "$result" in
         OK*)
-            log_info "  ✓ Added to knowledge base: $safe_name"
+            log_info "  ✓ Added: $versioned_name"
             return 0
             ;;
         FAIL_KB*)
-            log_error "  ✗ KB add failed (cleaned up): $safe_name"
+            log_error "  ✗ KB add failed: $versioned_name"
             return 1
             ;;
         *)
-            log_error "  ✗ Upload failed: $safe_name"
+            log_error "  ✗ Upload failed: $versioned_name"
             return 1
             ;;
     esac
 }
 
-# Get all files matching sync patterns
-get_all_matching_files() {
-    cd "$REPO_ROOT" || return 1
-    find . -type f \( -name "*.md" -o -name "*.yaml" \) \
-        ! -path "./.git/*" \
-        ! -name "*sealed-secret*" \
-        ! -name "*.env*" \
-        ! -name "*AGENTS.md*" \
-        | sed 's|^\./||' | sort
-}
-
-# Get list of deleted files since last sync
-get_deleted_files() {
-    local last_commit="$1"
-    [[ -z "$last_commit" ]] && return
-    [[ "${FORCE_FULL_SYNC:-}" == "true" ]] && return
-    cd "$REPO_ROOT" || return
-    git diff --name-only --diff-filter=D "$last_commit" HEAD 2>/dev/null || true
-}
-
-# Load existing files from knowledge base
-load_kb_files() {
-    log_info "Loading existing knowledge base files..."
-    local response
-    response=$(api_call GET "/api/v1/knowledge/$OPEN_WEBUI_KNOWLEDGE_ID")
-
-    if echo "$response" | jq -e '.files' > /dev/null 2>&1; then
-        KB_FILE_COUNT=$(echo "$response" | jq '.files | length')
-        # Build associative array of name -> file_id
-        while IFS= read -r line; do
-            local file_id name
-            file_id=$(echo "$line" | jq -r '.id')
-            name=$(echo "$line" | jq -r '.meta.name // .filename')
-            if [[ -n "$file_id" && "$file_id" != "null" ]]; then
-                KB_FILES["$name"]="$file_id"
-            fi
-        done < <(echo "$response" | jq -c '.files[]' 2>/dev/null)
-        log_info "  Found $KB_FILE_COUNT files in knowledge base"
-    else
-        log_warn "  Could not load knowledge base files (may be empty or first sync)"
-        KB_FILE_COUNT=0
-    fi
-}
-
-
 # Main sync function
 sync_to_rag() {
-    log_info "Starting RAG sync"
+    log_info "Starting RAG sync (tag-based versioning)"
+    log_info "Version: $RAG_VERSION"
     log_info "Knowledge base ID: $OPEN_WEBUI_KNOWLEDGE_ID"
     log_info "Repository root: $REPO_ROOT"
     echo ""
@@ -311,65 +189,31 @@ sync_to_rag() {
     fi
     log_info "Using pod: $POD"
 
-    # Declare associative array for KB files
-    declare -A KB_FILES=()
-    local KB_FILE_COUNT=0
-
-    # Load existing KB state
-    load_kb_files
-    echo ""
-
-    # Get last sync point
-    local last_commit
-    last_commit=$(get_last_sync_commit)
-
-    if [[ -n "$last_commit" ]]; then
-        log_info "Last sync commit: ${last_commit:0:8}"
+    # Get previous tag for comparison
+    local prev_tag
+    prev_tag=$(get_previous_tag)
+    if [[ -n "$prev_tag" ]]; then
+        log_info "Previous tag: $prev_tag"
     else
-        log_info "No previous sync marker found"
+        log_info "No previous tag found (first release)"
     fi
+    echo ""
 
     local uploaded=0
     local skipped=0
-    local deleted=0
     local failed=0
-    local already_synced=0
     declare -a FAILED_FILES=()
 
-    # Handle deleted files first
-    if [[ -n "$last_commit" ]]; then
-        log_info "Checking for deleted files..."
-        while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-            local safe_name
-            safe_name=$(path_to_safe_name "$file")
-            if [[ -n "${KB_FILES[$safe_name]:-}" ]]; then
-                if delete_file "${KB_FILES[$safe_name]}" "$safe_name"; then
-                    deleted=$((deleted + 1))
-                    unset "KB_FILES[$safe_name]"
-                fi
-            fi
-        done < <(get_deleted_files "$last_commit")
-    fi
-
-    echo ""
     log_info "Processing files..."
 
     cd "$REPO_ROOT" || { log_error "Cannot access repo root"; exit 1; }
 
-    # Process all matching files
+    # Process changed files
     while IFS= read -r file; do
         [[ -z "$file" ]] && continue
 
         # Check exclusions
         if is_excluded "$file"; then
-            continue
-        fi
-
-        # Check if file should be skipped (known embedding issues)
-        if should_skip "$file"; then
-            log_warn "Skipping (known issue): $file"
-            skipped=$((skipped + 1))
             continue
         fi
 
@@ -389,61 +233,27 @@ sync_to_rag() {
             continue
         fi
 
-        # Convert to safe name for KB lookup (/ -> __)
-        local safe_name
-        safe_name=$(path_to_safe_name "$file")
+        # Generate versioned filename
+        local versioned_name
+        versioned_name=$(path_to_versioned_name "$file" "$RAG_VERSION")
 
-        # Decision logic - lookup using safe name since that's how files are stored in KB
-        local file_in_kb=false
-        if [[ -n "${KB_FILES[$safe_name]:-}" ]]; then
-            file_in_kb=true
-        fi
-
-        if [[ "$file_in_kb" == "false" ]]; then
-            # File not in KB - upload it
-            log_info "New file: $file"
-            if upload_file "$full_path"; then
-                uploaded=$((uploaded + 1))
-            else
-                failed=$((failed + 1))
-                FAILED_FILES+=("$file")
-            fi
-        elif [[ "${FORCE_FULL_SYNC:-}" == "true" ]]; then
-            # Force sync - delete and re-upload
-            log_info "Force sync: $file"
-            delete_file "${KB_FILES[$safe_name]}" "$safe_name" || true
-            if upload_file "$full_path"; then
-                uploaded=$((uploaded + 1))
-            else
-                failed=$((failed + 1))
-                FAILED_FILES+=("$file")
-            fi
-        elif file_changed_since "$file" "$last_commit"; then
-            # File in KB but changed - delete old and upload new
-            log_info "Changed: $file"
-            delete_file "${KB_FILES[$safe_name]}" "$safe_name" || true
-            if upload_file "$full_path"; then
-                uploaded=$((uploaded + 1))
-            else
-                failed=$((failed + 1))
-                FAILED_FILES+=("$file")
-            fi
+        log_info "Uploading: $file -> $versioned_name"
+        if upload_file "$full_path" "$versioned_name"; then
+            uploaded=$((uploaded + 1))
         else
-            # File in KB and not changed - skip
-            already_synced=$((already_synced + 1))
+            failed=$((failed + 1))
+            FAILED_FILES+=("$file")
         fi
 
-    done < <(get_all_matching_files)
+    done < <(get_changed_files "$prev_tag")
 
     echo ""
     log_info "===== Sync Summary ====="
-    log_info "  Uploaded:       $uploaded"
-    log_info "  Already synced: $already_synced"
-    log_info "  Deleted:        $deleted"
-    log_info "  Skipped:        $skipped"
-    log_info "  Failed:         $failed"
+    log_info "  Version:    $RAG_VERSION"
+    log_info "  Uploaded:   $uploaded"
+    log_info "  Skipped:    $skipped"
+    log_info "  Failed:     $failed"
 
-    # Any failure is an error (skipped files are handled earlier)
     if [[ $failed -gt 0 ]]; then
         log_error "Sync failed with $failed failures:"
         for file in "${FAILED_FILES[@]}"; do
@@ -452,10 +262,8 @@ sync_to_rag() {
         exit 1
     fi
 
-    save_sync_commit
     log_info "Sync completed successfully"
 }
 
 # Run
-check_requirements
 sync_to_rag
