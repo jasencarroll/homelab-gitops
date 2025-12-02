@@ -147,7 +147,7 @@ jobs:
           # Run polaris on rendered manifests
           polaris audit --audit-path /tmp/rendered-manifests \
             --format pretty \
-            --set-exit-code-below-score 60 || true
+            --set-exit-code-below-score 80 || true
 
           # Also output score summary
           echo ""
@@ -310,8 +310,8 @@ jobs:
           echo "=== Issue Summary ==="
           jq -r '.popeye.sanitizers[] | select(.issues != null) | "\(.sanitizer): \(.issues | length) issues"' /tmp/popeye-report.json 2>/dev/null || true
 
-          # Fail if score drops below threshold (currently 75 to allow some wiggle room)
-          THRESHOLD=75
+          # Fail if score drops below threshold
+          THRESHOLD=80
           if [ "${SCORE}" -lt "${THRESHOLD}" ]; then
             echo ""
             echo "ERROR: Cluster health score ${SCORE}% is below threshold of ${THRESHOLD}%"

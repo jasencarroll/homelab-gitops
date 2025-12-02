@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-THRESHOLD=75
+THRESHOLD=80
 
 # Check if popeye is installed
 if ! command -v popeye &> /dev/null; then
