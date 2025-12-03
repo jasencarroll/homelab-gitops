@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/part-of: homelab
     app.kubernetes.io/managed-by: argocd
 spec:
-  schedule: "0 3 * * *"  # 3 AM daily
+  schedule: "0 4 * * *"  # 4 AM daily (after Longhorn backups)
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
