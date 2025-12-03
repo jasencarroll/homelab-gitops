@@ -27,6 +27,14 @@
       "title": "Networking & TLS"
     },
     {
+      "path": "docs/BACKUPS.md",
+      "title": "Backup & Recovery Guide"
+    },
+    {
+      "path": "docs/DISASTER_RECOVERY.md",
+      "title": "Disaster Recovery"
+    },
+    {
       "path": "docs/RUNBOOKS.md",
       "title": "Runbooks"
     },
