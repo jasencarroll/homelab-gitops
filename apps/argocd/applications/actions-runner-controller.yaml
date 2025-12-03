@@ -18,6 +18,19 @@ spec:
         authSecret:
           create: false
           name: github-runner-token
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        kubeRbacProxy:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: actions-runner
