@@ -15,7 +15,7 @@
     },
     "docs/INFRASTRUCTURE.md": {
       "id": "3c0b39e5-7821-4644-ad20-7216aeb51ecb",
-      "hash": "cc75f2e2d24f0386697d14f38b9c0a87fb2c0b2fadb5b4f728cc1e67ee63ecb3"
+      "hash": "ab948531a72ae71f555dc646c376bd80be5fd3e2821b210c2dc4cc3ee03fec62"
     },
     "docs/NETWORKING.md": {
       "id": "3462d292-1e7d-4ebc-ab63-66c4581e44bc",
@@ -27,7 +27,7 @@
     },
     "docs/RUNBOOKS.md": {
       "id": "64a0610c-c577-43fb-8fcb-41b23b02e4f6",
-      "hash": "16af9329749cea433a198862ca6154673e372cdb77fe21ee64686e6d05be6c03"
+      "hash": "4ce1df0331fc9e671c9fc50227dbf72db0dbb8d2f375649d7cd455e2ca27525a"
     },
     "docs/SECRETS.md": {
       "id": "2b2bfbfe-3d1f-46bd-84a3-38b9db0c7249",
@@ -59,7 +59,39 @@
     },
     "tests/README.md": {
       "id": "c0bc8699-bde5-4960-8ac9-66fb14a6bb3b",
-      "hash": "cda7dec8626835c7c42fdee6c2f1bea3c6392e1f5b777e5ee0f66c6873dc3382"
+      "hash": "f9d08fd4f8905a710db74ba1d0cf488a6d987c9f5ac7ebe822afd21c04a00283"
+    },
+    "CLAUDE.md": {
+      "id": "968f2423-615a-4bc3-aee8-17a02aa9088d",
+      "hash": "be9948f88ec354e707ea07ee994f06b2f211cc8299adda5964fe0f02f58cc5bf"
+    },
+    "docs/encrypted-backup-recovery.md": {
+      "id": "543eb664-3b08-439c-bc3a-1e1aac61bf35",
+      "hash": "9548a7a3f3b35ffea1f4a81810ac96fb498667db99db4c00a3004f6f7c9f3333"
+    },
+    "docs/DISASTER_RECOVERY.md": {
+      "id": "1d7b2915-ad2b-453e-b9ef-7b8276a11437",
+      "hash": "5bd4d3c186c49e802b7f3c592e4854e96e2e654c35ae609ca4143c8e99154d55"
+    },
+    "docs/developer-guide.md": {
+      "id": "fe59b684-7e94-4278-9644-78da7a93a0c0",
+      "hash": "fca8aa0c39b3ed2503b3f7524b25aca1a9378225ec6959ce1c9e5639a14c02eb"
+    },
+    "docs/BACKUPS.md": {
+      "id": "a761fa52-aed7-4277-a8d0-1b6f7ebdb314",
+      "hash": "ba9c956e1dba85b91bab32df8c8f4968171ceffbcbd3f60a2f7103b50470ecb3"
+    },
+    "docs/RAG_KNOWLEDGE_BASE.md": {
+      "id": "7a99952b-e4c7-431b-90bc-4377be6a643a",
+      "hash": "776369b5ac43c5a863dc403c9f1d21bf65a6aacd40109b36019dbffe8f1079fd"
+    },
+    "docs/rag-sync-migration.md": {
+      "id": "83df524f-57b3-4b39-9163-79052abd8bbb",
+      "hash": "04be340405b5004c569d3a2117fc7507bfb389f921576b3bc37bec510f2459e4"
+    },
+    "docs/APP-DEPLOYMENT-WORKFLOW.md": {
+      "id": "d519e444-e727-406f-8dcc-c361a5d52e2c",
+      "hash": "9393df4aa789de73a91185c4e30ed48c18d5cd21c21cc510e7760e5d184f4af1"
     }
   }
 }

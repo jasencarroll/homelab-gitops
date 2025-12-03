@@ -71,7 +71,7 @@ This directory contains automated tests for verifying homelab cluster health, se
    - Alertmanager healthy
 9. **Backups**:
    - CronJob exists
-   - NFS proxy accessible
+   - Longhorn recurring jobs configured
 
 **Usage**:
 ```bash
