@@ -38,6 +38,10 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_skip() { echo -e "${BLUE}[SKIP]${NC} $1"; }
 
+# Debug: Print secret lengths (without revealing actual values)
+log_info "DEBUG: OPEN_WEBUI_API_KEY length: ${#OPEN_WEBUI_API_KEY}"
+log_info "DEBUG: OPEN_WEBUI_KNOWLEDGE_ID length: ${#OPEN_WEBUI_KNOWLEDGE_ID}"
+
 # Parse command line arguments
 for arg in "$@"; do
     case $arg in
@@ -193,7 +197,10 @@ upload_file() {
     local safe_name="$2"
 
     # Copy file to pod
-    kubectl cp "$file_path" "open-webui/$POD:/tmp/sync-file" 2>/dev/null
+    if ! kubectl cp "$file_path" "open-webui/$POD:/tmp/sync-file" 2>&1; then
+        echo "kubectl cp failed" >&2
+        return 1
+    fi
 
     # Base64 encode credentials to avoid shell expansion issues in kubectl exec
     local api_key_b64 kb_id_b64 filename_b64
@@ -239,13 +246,15 @@ else
     fi
 fi
 rm -f /tmp/sync-file
-" 2>/dev/null)
+" 2>&1)
 
     case "$result" in
         OK*)
             return 0
             ;;
         *)
+            # Print the failure reason to stderr for debugging
+            echo "Upload result: $result" >&2
             return 1
             ;;
     esac
@@ -351,11 +360,14 @@ sync_to_rag() {
             log_info "Adding: $file (new file)"
         fi
 
-        if upload_file "$full_path" "$safe_name"; then
+        local upload_result
+        upload_result=$(upload_file "$full_path" "$safe_name" 2>&1)
+        local upload_rc=$?
+        if [[ $upload_rc -eq 0 ]]; then
             log_info "  ✓ Uploaded successfully"
             uploaded=$((uploaded + 1))
         else
-            log_error "  ✗ Upload failed"
+            log_error "  ✗ Upload failed: $upload_result"
             failed=$((failed + 1))
             FAILED_FILES+=("$file")
         fi
