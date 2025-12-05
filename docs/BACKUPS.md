@@ -9,6 +9,7 @@ Complete documentation for the homelab backup strategy, including automated back
 - [Automated Backups](#automated-backups)
   - [Longhorn Volume Backups](#longhorn-volume-backups)
   - [Database Backups (CronJob)](#database-backups-cronjob)
+  - [Litestream SQLite Replication](#litestream-sqlite-replication)
 - [Storage Location](#storage-location)
 - [Monitoring Backups](#monitoring-backups)
 - [Manual Backup Procedures](#manual-backup-procedures)
@@ -20,7 +21,7 @@ Complete documentation for the homelab backup strategy, including automated back
 
 ## Backup Architecture Overview
 
-The homelab uses a **layered backup strategy** with two complementary systems:
+The homelab uses a **three-layer backup strategy** with complementary systems:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -58,6 +59,21 @@ The homelab uses a **layered backup strategy** with two complementary systems:
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                 LAYER 3: LITESTREAM REPLICATION                     │   │
+│  │                                                                       │   │
+│  │   SQLite Continuous Streaming (near-real-time)                       │   │
+│  │   └── Continuous WAL streaming to MinIO                             │   │
+│  │                                                                       │   │
+│  │   Applications:                                                       │   │
+│  │   ├── PocketBase (/pb_data/data.db)                                 │   │
+│  │   └── Campfire (/rails/storage/production.sqlite3)                  │   │
+│  │                                                                       │   │
+│  │   Target: MinIO (minio.minio.svc:9000) / litestream-backups bucket  │   │
+│  │   RPO: Seconds (continuous replication)                              │   │
+│  │   RTO: Minutes (restore from WAL segments)                          │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    BACKUP DESTINATION                                │   │
 │  │                                                                       │   │
 │  │   UniFi NAS (192.168.1.234)                                          │   │
@@ -69,16 +85,17 @@ The homelab uses a **layered backup strategy** with two complementary systems:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Why Two Backup Layers?
+### Why Three Backup Layers?
 
-| Aspect | Longhorn Backups | SQL Dumps |
-|--------|------------------|-----------|
-| **Speed** | Fast (block-level) | Slower (logical) |
-| **Granularity** | Point-in-time volume state | Schema + data |
-| **Portability** | Requires Longhorn | Any PostgreSQL |
-| **Recovery** | Restore entire volume | Selective restore possible |
-| **Verification** | Binary check | Human-readable SQL |
-| **Use Case** | Quick recovery | Migration, audit, selective restore |
+| Aspect | Longhorn Backups | SQL Dumps | Litestream |
+|--------|------------------|-----------|------------|
+| **Speed** | Fast (block-level) | Slower (logical) | Continuous |
+| **Granularity** | Point-in-time volume state | Schema + data | WAL-level (seconds) |
+| **Portability** | Requires Longhorn | Any PostgreSQL | Any SQLite |
+| **Recovery** | Restore entire volume | Selective restore | Point-in-time recovery |
+| **Verification** | Binary check | Human-readable SQL | WAL integrity |
+| **Use Case** | Quick recovery | Migration, audit | Near-zero RPO for SQLite apps |
+| **Databases** | All PVCs | PostgreSQL | SQLite (PocketBase, Campfire) |
 
 ---
 
@@ -221,6 +238,133 @@ A Kubernetes CronJob runs daily to create SQL dumps:
 │   └── outline-db.sql
 └── ... (up to 7 directories)
 ```
+
+### Litestream SQLite Replication
+
+Litestream provides continuous SQLite replication for PocketBase and Campfire. It runs as a sidecar container alongside each application.
+
+**Location:** Sidecar containers in `apps/pocketbase/deployment.yaml` and `apps/campfire/deployment.yaml`
+
+| Setting | Value |
+|---------|-------|
+| Schedule | Continuous (real-time streaming) |
+| Applications | PocketBase, Campfire |
+| Target | MinIO (minio.minio.svc:9000) |
+| Bucket | litestream-backups |
+| Paths | `pocketbase/`, `campfire/` |
+
+#### How It Works
+
+1. Litestream sidecar starts alongside the main application container
+2. Monitors SQLite WAL (Write-Ahead Log) changes
+3. Streams WAL segments to MinIO bucket in real-time
+4. Maintains generations for point-in-time recovery
+5. Low resource overhead (10m CPU, 32Mi memory)
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    PocketBase/Campfire Pod                           │
+│                                                                      │
+│  ┌─────────────────────┐    ┌─────────────────────┐                 │
+│  │   Main Container    │    │  Litestream Sidecar │                 │
+│  │   (app writes to    │    │  (monitors WAL)     │                 │
+│  │    SQLite)          │    │                     │                 │
+│  └──────────┬──────────┘    └──────────┬──────────┘                 │
+│             │                          │                             │
+│             │       Shared Volume      │                             │
+│             └──────────┬───────────────┘                             │
+│                        │                                             │
+│              ┌─────────▼─────────┐                                  │
+│              │  SQLite Database  │                                  │
+│              │  + WAL files      │                                  │
+│              └─────────┬─────────┘                                  │
+│                        │                                             │
+└────────────────────────┼────────────────────────────────────────────┘
+                         │
+                         │ Continuous WAL streaming
+                         ▼
+              ┌─────────────────────┐
+              │       MinIO         │
+              │   (S3-compatible)   │
+              │                     │
+              │ litestream-backups/ │
+              │ ├── pocketbase/     │
+              │ │   └── generations │
+              │ └── campfire/       │
+              │     └── generations │
+              └─────────────────────┘
+```
+
+#### Configuration
+
+Litestream configuration is stored in ConfigMaps:
+
+```yaml
+# apps/pocketbase/litestream-config.yaml
+dbs:
+  - path: /pb_data/data.db
+    replicas:
+      - type: s3
+        bucket: litestream-backups
+        path: pocketbase
+        endpoint: http://minio.minio.svc:9000
+        force-path-style: true
+```
+
+```yaml
+# apps/campfire/litestream-config.yaml
+dbs:
+  - path: /rails/storage/production.sqlite3
+    replicas:
+      - type: s3
+        bucket: litestream-backups
+        path: campfire
+        endpoint: http://minio.minio.svc:9000
+        force-path-style: true
+```
+
+#### Monitoring Litestream
+
+```bash
+# Check Litestream status for PocketBase
+kubectl logs -n pocketbase -l app.kubernetes.io/name=pocketbase -c litestream
+
+# Check Litestream status for Campfire
+kubectl logs -n campfire -l app.kubernetes.io/name=campfire -c litestream
+
+# Check MinIO connectivity
+kubectl exec -n minio minio-0 -- ls /data/litestream-backups/
+```
+
+#### Restore from Litestream
+
+To restore a SQLite database from Litestream backups:
+
+```bash
+# 1. Scale down the application
+kubectl scale deployment/pocketbase -n pocketbase --replicas=0
+
+# 2. Create a restore job (example for PocketBase)
+kubectl run litestream-restore --rm -it \
+  --image=litestream/litestream:0.3 \
+  --restart=Never \
+  -n pocketbase \
+  --env="LITESTREAM_ACCESS_KEY_ID=$(kubectl get secret -n pocketbase minio-credentials -o jsonpath='{.data.root-user}' | base64 -d)" \
+  --env="LITESTREAM_SECRET_ACCESS_KEY=$(kubectl get secret -n pocketbase minio-credentials -o jsonpath='{.data.root-password}' | base64 -d)" \
+  -- restore -o /tmp/restored.db \
+     s3://litestream-backups/pocketbase \
+     -endpoint http://minio.minio.svc:9000
+
+# 3. Copy restored database to PVC (requires volume mount)
+# ... or delete PVC and let Litestream restore on startup
+
+# 4. Scale application back up
+kubectl scale deployment/pocketbase -n pocketbase --replicas=1
+```
+
+**Note:** For simpler recovery, consider restoring from Longhorn backups first. Litestream is most useful for point-in-time recovery when you need data from between scheduled Longhorn backups.
 
 ---
 

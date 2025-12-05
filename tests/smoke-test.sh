@@ -156,6 +156,13 @@ else
     fail "Longhorn manager is not running"
 fi
 
+# MinIO (S3-compatible object storage for Litestream)
+if kubectl get pods -n minio -l app.kubernetes.io/name=minio --no-headers 2>/dev/null | grep -q "Running"; then
+    pass "MinIO is running"
+else
+    fail "MinIO is not running"
+fi
+
 # Check PVCs are bound
 UNBOUND_PVC=$(kubectl get pvc -A --no-headers 2>/dev/null | grep -v "Bound" | wc -l | tr -d '[:space:]' || echo "0")
 if [ "$UNBOUND_PVC" -eq 0 ]; then
@@ -454,6 +461,7 @@ REQUIRED_NETPOL_NS=(
     "pocketbase"
     "authentik"
     "plane"
+    "minio"
 )
 
 for ns in "${REQUIRED_NETPOL_NS[@]}"; do
@@ -607,6 +615,7 @@ check_service "Prometheus" "monitoring" "kube-prometheus-stack-prometheus" "9090
 check_service "Alertmanager" "monitoring" "kube-prometheus-stack-alertmanager" "9093"
 check_service "Loki" "monitoring" "loki" "3100"
 check_service "Longhorn UI" "longhorn-system" "longhorn-frontend" "80"
+check_service "MinIO" "minio" "minio" "9000"
 
 section "Ingress Resources"
 
@@ -634,6 +643,7 @@ CRITICAL_SECRETS=(
     "monitoring:grafana-oidc-secret"
     "outline:outline-secrets"
     "n8n:n8n-secrets"
+    "minio:minio-credentials"
 )
 
 for secret in "${CRITICAL_SECRETS[@]}"; do
