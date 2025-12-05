@@ -1,0 +1,20 @@
+# Popeye spinfile - exclude known issues we can't fix
+# Format for popeye 0.21.x
+
+popeye:
+  allocations:
+    cpu:
+      underPercUtilization: 200
+      overPercUtilization: 50
+    memory:
+      underPercUtilization: 200
+      overPercUtilization: 50
+
+  excludes:
+    global:
+      fqns:
+        - rx:kube-system
+        - rx:kube-public
+        - rx:kube-node-lease
+        - rx:cnpg-system
+        - rx:longhorn-system

@@ -150,6 +150,15 @@ spec:
               memory: 32Mi
             limits:
               memory: 128Mi
+        # Disable K3s-incompatible components (these run differently in K3s)
+        kubeControllerManager:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        kubeScheduler:
+          enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

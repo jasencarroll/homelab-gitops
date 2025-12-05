@@ -279,6 +279,9 @@ jobs:
     needs: [ci-passed]
     if: github.event_name == 'pull_request' && always() && needs.ci-passed.result == 'success'
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Install popeye
         run: |
           if ! command -v popeye &> /dev/null; then
@@ -298,8 +301,12 @@ jobs:
 
       - name: Run Popeye scan
         run: |
-          # Run popeye and capture score
-          popeye --all-namespaces --force-exit-zero -o json > /tmp/popeye-report.json 2>/dev/null || true
+          # Run popeye with spinfile and capture score
+          SPINFILE_ARG=""
+          if [ -f ".popeye.yaml" ]; then
+            SPINFILE_ARG="-f .popeye.yaml"
+          fi
+          popeye --all-namespaces --force-exit-zero $SPINFILE_ARG -o json > /tmp/popeye-report.json 2>/dev/null || true
 
           # Extract and display score (popeye JSON structure: .popeye.score)
           SCORE=$(jq -r '.popeye.score // 0' /tmp/popeye-report.json 2>/dev/null || echo "0")
