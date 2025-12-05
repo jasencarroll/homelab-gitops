@@ -10,6 +10,7 @@ Detailed documentation for all infrastructure components in the homelab cluster.
 - [Authentik (SSO)](#authentik-sso)
 - [ArgoCD (GitOps)](#argocd-gitops)
 - [Longhorn (Storage)](#longhorn-storage)
+- [MinIO (Object Storage)](#minio-object-storage)
 - [Backups](#backups)
 - [CloudNativePG](#cloudnativepg)
 - [External-DNS](#external-dns)
@@ -592,9 +593,131 @@ kubectl logs -n longhorn-system -l app=longhorn-manager -f
 
 ---
 
+## MinIO (Object Storage)
+
+**S3-Compatible Object Storage for Litestream Backups**
+
+### Overview
+
+| Property | Value |
+|----------|-------|
+| Namespace | minio |
+| Service | minio.minio.svc:9000 (API), :9001 (Console) |
+| Storage | 10Gi Longhorn PVC |
+| Purpose | Litestream backup target for SQLite apps |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         MinIO System                                  │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │                     MinIO StatefulSet                     │       │
+│  │                                                           │       │
+│  │   ┌─────────────────┐                                    │       │
+│  │   │     minio-0     │                                    │       │
+│  │   │                 │                                    │       │
+│  │   │  Port 9000: API │◄──── Litestream (pocketbase)       │       │
+│  │   │  Port 9001: UI  │◄──── Litestream (campfire)         │       │
+│  │   │                 │◄──── Longhorn backups (optional)   │       │
+│  │   └────────┬────────┘                                    │       │
+│  │            │                                              │       │
+│  │   ┌────────▼────────┐                                    │       │
+│  │   │   Longhorn PVC  │                                    │       │
+│  │   │     (10Gi)      │                                    │       │
+│  │   │   /data mount   │                                    │       │
+│  │   └─────────────────┘                                    │       │
+│  └──────────────────────────────────────────────────────────┘       │
+│                                                                      │
+│  Buckets:                                                           │
+│  └── litestream-backups/                                            │
+│      ├── pocketbase/   (PocketBase SQLite WAL segments)            │
+│      └── campfire/     (Campfire SQLite WAL segments)              │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `infrastructure/minio/namespace.yaml` | Namespace definition |
+| `infrastructure/minio/statefulset.yaml` | MinIO StatefulSet with Longhorn PVC |
+| `infrastructure/minio/service.yaml` | ClusterIP service (API + Console) |
+| `infrastructure/minio/sealed-secret.yaml` | MinIO root credentials |
+| `infrastructure/minio/networkpolicy.yaml` | Network isolation + allowed clients |
+| `infrastructure/minio/kustomization.yaml` | Kustomize manifest |
+| `apps/argocd/applications/minio.yaml` | ArgoCD Application |
+
+### Network Policies
+
+MinIO uses default-deny network policies with explicit allows:
+
+| Policy | Source | Port | Purpose |
+|--------|--------|------|---------|
+| minio-allow-ingress | pocketbase namespace | 9000 | Litestream replication |
+| minio-allow-ingress | campfire namespace | 9000 | Litestream replication |
+| minio-allow-ingress | longhorn-system namespace | 9000 | Future Longhorn S3 backups |
+| minio-allow-egress | kube-dns | 53 | DNS resolution |
+
+### Credentials
+
+MinIO credentials are stored as Sealed Secrets:
+
+- **minio namespace**: `infrastructure/minio/sealed-secret.yaml`
+- **pocketbase namespace**: `apps/pocketbase/minio-sealed-secret.yaml`
+- **campfire namespace**: `apps/campfire/minio-sealed-secret.yaml`
+
+Keys:
+- `root-user`: MinIO admin username
+- `root-password`: MinIO admin password
+
+### Commands
+
+```bash
+# Check MinIO status
+kubectl get pods -n minio
+kubectl get pvc -n minio
+
+# View MinIO logs
+kubectl logs -n minio -l app.kubernetes.io/name=minio
+
+# Check MinIO health
+kubectl exec -n minio minio-0 -- curl -s http://localhost:9000/minio/health/live
+
+# List bucket contents
+kubectl exec -n minio minio-0 -- ls -la /data/litestream-backups/
+
+# Check network connectivity from client
+kubectl exec -n pocketbase -l app.kubernetes.io/name=pocketbase -c litestream -- \
+  wget -q -O - http://minio.minio.svc:9000/minio/health/live
+
+# Restart MinIO
+kubectl rollout restart statefulset/minio -n minio
+```
+
+### Creating Buckets
+
+The `litestream-backups` bucket must be created manually after initial deployment:
+
+```bash
+# Option 1: Using MinIO Console (if exposed)
+# Navigate to minio.minio.svc:9001 from within cluster
+
+# Option 2: Using mc CLI from MinIO pod
+kubectl exec -it -n minio minio-0 -- sh -c '
+  mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+  mc mb local/litestream-backups
+  mc ls local/
+'
+```
+
+---
+
 ## Backups
 
-**Two-layer backup strategy: Longhorn volume backups + SQL dumps**
+**Three-layer backup strategy: Longhorn volume backups + SQL dumps + Litestream**
 
 For comprehensive backup documentation, see **[docs/BACKUPS.md](BACKUPS.md)**.
 
@@ -605,6 +728,7 @@ For comprehensive backup documentation, see **[docs/BACKUPS.md](BACKUPS.md)**.
 | Longhorn Snapshots | All PVCs | 2:00 AM daily | 7 days | Fast local rollback |
 | Longhorn Backups | All PVCs | 2:30 AM daily | 7 days | Disaster recovery (to NAS) |
 | SQL Dumps | Authentik, Outline | 4:00 AM daily | 7 days | Portable database backups |
+| Litestream | PocketBase, Campfire | Continuous | Generations | Near-zero RPO for SQLite |
 
 ### Files
 

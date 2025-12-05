@@ -64,6 +64,7 @@ homelab-gitops/
 │   ├── cloudnative-pg/       # PostgreSQL operator
 │   ├── external-dns/         # DNS management (Cloudflare)
 │   ├── longhorn/             # Distributed storage
+│   ├── minio/                # Shared S3-compatible object storage
 │   ├── monitoring/           # Prometheus/Grafana extras (OIDC, certs)
 │   ├── open-webui/           # AI chat interface
 │   └── sealed-secrets/       # Sealed Secrets controller
@@ -97,7 +98,9 @@ homelab-gitops/
 | Network | Tailscale | Mesh VPN |
 | AI/LLM | Open WebUI + Ollama | Chat interface |
 | BaaS | PocketBase | Backend as a Service (SQLite) |
-| Backups | Longhorn + CronJob | Volume backups + SQL dumps to NAS |
+| Object Storage | MinIO | S3-compatible storage for Litestream |
+| SQLite Replication | Litestream | Continuous SQLite backup to MinIO |
+| Backups | Longhorn + CronJob + Litestream | Volume backups + SQL dumps + SQLite streaming |
 | Secrets | Sealed Secrets | Encrypted secrets in Git |
 | Doc Sync | scripts/sync-*.sh | Hash-based sync to Outline + RAG |
 
@@ -107,9 +110,9 @@ homelab-gitops/
 |-----|-----|-----------|-----------|----------|
 | Dashboard | db.lab.axiomlayer.com | Forward Auth | dashboard | - |
 | Open WebUI | ai.lab.axiomlayer.com | Forward Auth | open-webui | CNPG |
-| Campfire | chat.lab.axiomlayer.com | Forward Auth | campfire | SQLite |
+| Campfire | chat.lab.axiomlayer.com | Forward Auth | campfire | SQLite + Litestream |
 | n8n | autom8.lab.axiomlayer.com | Forward Auth | n8n | CNPG |
-| PocketBase | pb.lab.axiomlayer.com/_/ | Forward Auth | pocketbase | SQLite |
+| PocketBase | pb.lab.axiomlayer.com/_/ | Forward Auth | pocketbase | SQLite + Litestream |
 | Alertmanager | alerts.lab.axiomlayer.com | Forward Auth | monitoring | - |
 | Longhorn | longhorn.lab.axiomlayer.com | Forward Auth | longhorn-system | - |
 | ArgoCD | argocd.lab.axiomlayer.com | Dex OIDC | argocd | - |
@@ -133,7 +136,7 @@ CloudNativePG manages PostgreSQL instances:
 
 ## Automated Backups
 
-Two-layer backup strategy protects all data:
+Three-layer backup strategy protects all data:
 
 ### Layer 1: Longhorn Volume Backups (All PVCs)
 
@@ -166,6 +169,30 @@ kubectl logs -n longhorn-system -l job-name=homelab-backup-test
 
 # Check Longhorn backups
 kubectl get backups -n longhorn-system --sort-by=.metadata.creationTimestamp | tail -10
+```
+
+### Layer 3: Litestream SQLite Replication (Continuous)
+
+| Setting | Value |
+|---------|-------|
+| Mode | Continuous streaming |
+| Applications | PocketBase, Campfire |
+| Target | MinIO (minio.minio.svc:9000) |
+| Bucket | litestream-backups |
+| RPO | Seconds (near real-time) |
+
+Litestream runs as a sidecar container alongside PocketBase and Campfire, continuously replicating SQLite WAL changes to MinIO. This provides:
+- Near-zero RPO (Recovery Point Objective)
+- Point-in-time recovery capability
+- Independent of Longhorn backup schedules
+
+```bash
+# Check Litestream replication status
+kubectl logs -n pocketbase -l app.kubernetes.io/name=pocketbase -c litestream
+kubectl logs -n campfire -l app.kubernetes.io/name=campfire -c litestream
+
+# Check MinIO bucket contents (requires mc CLI in pod)
+kubectl exec -n minio minio-0 -- mc ls local/litestream-backups/
 ```
 
 **Full documentation**: See `docs/BACKUPS.md` for complete backup and recovery procedures.
@@ -350,6 +377,8 @@ The `.env` file stores secrets for re-sealing. Never commit this file.
 | OUTLINE_API_KEY | Outline API access (also accepted as OUTLINE_API_TOKEN) |
 | OPEN_WEBUI_API_KEY | Open WebUI API access |
 | OPEN_WEBUI_KNOWLEDGE_ID | RAG knowledge base ID |
+| MINIO_ROOT_USER | MinIO admin username |
+| MINIO_ROOT_PASSWORD | MinIO admin password |
 
 ## Key Commands
 
@@ -389,6 +418,14 @@ kubectl create job --from=cronjob/homelab-backup homelab-backup-test -n longhorn
 
 # Check Longhorn volumes
 kubectl get volumes -n longhorn-system
+
+# Check MinIO status
+kubectl get pods -n minio
+kubectl logs -n minio -l app.kubernetes.io/name=minio
+
+# Check Litestream replication
+kubectl logs -n pocketbase -l app.kubernetes.io/name=pocketbase -c litestream
+kubectl logs -n campfire -l app.kubernetes.io/name=campfire -c litestream
 
 # Git workflow (main branch is protected - requires PRs)
 git checkout -b feat/your-feature     # Create feature branch

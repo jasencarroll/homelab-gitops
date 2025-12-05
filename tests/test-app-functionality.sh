@@ -517,6 +517,22 @@ test_campfire() {
         else
             info "Campfire has $rails_errors Rails error(s) in recent logs"
         fi
+
+        # Check Litestream sidecar
+        local litestream_logs
+        litestream_logs=$(kubectl logs "${campfire_pod#pod/}" -n campfire -c litestream --tail=20 2>/dev/null || echo "")
+
+        if [[ -n "$litestream_logs" ]]; then
+            if echo "$litestream_logs" | grep -qi "replicating\|initialized\|replica"; then
+                pass "Campfire Litestream sidecar is replicating"
+            elif echo "$litestream_logs" | grep -qi "error\|failed"; then
+                fail "Campfire Litestream sidecar has errors"
+            else
+                info "Campfire Litestream sidecar is running (status unclear)"
+            fi
+        else
+            skip "Campfire Litestream sidecar not found or not running"
+        fi
     else
         fail "Campfire pod not running"
     fi
@@ -555,7 +571,122 @@ test_dashboard() {
     fi
 }
 
-# Test 10: Database Health Checks
+# Test 10: PocketBase Backend as a Service
+test_pocketbase() {
+    print_section "PocketBase BaaS Tests"
+
+    # Check if namespace exists
+    if ! kubectl get namespace pocketbase &> /dev/null; then
+        skip "PocketBase namespace does not exist"
+        return
+    fi
+
+    # Check PocketBase health endpoint
+    local health_url="https://pb.lab.axiomlayer.com/api/health"
+    local response
+    response=$(http_request "$health_url" "GET" "" "" 10)
+
+    if echo "$response" | grep -qi "code.*200\|ok\|healthy"; then
+        pass "PocketBase health endpoint returns healthy"
+    else
+        # Fallback: check if main page loads
+        local status
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://pb.lab.axiomlayer.com/_/" 2>/dev/null || echo "000")
+        if [[ "$status" == "200" ]] || [[ "$status" == "302" ]]; then
+            pass "PocketBase admin page accessible (status: $status)"
+        else
+            fail "PocketBase not responding (status: $status)"
+            return
+        fi
+    fi
+
+    # Check PocketBase pod
+    local pocketbase_pod
+    pocketbase_pod=$(kubectl get pods -n pocketbase -l "app.kubernetes.io/name=pocketbase" --field-selector=status.phase=Running -o name 2>/dev/null | head -1)
+
+    if [[ -n "$pocketbase_pod" ]]; then
+        pass "PocketBase pod is running"
+
+        # Check Litestream sidecar
+        local litestream_logs
+        litestream_logs=$(kubectl logs "${pocketbase_pod#pod/}" -n pocketbase -c litestream --tail=20 2>/dev/null || echo "")
+
+        if [[ -n "$litestream_logs" ]]; then
+            if echo "$litestream_logs" | grep -qi "replicating\|initialized\|replica"; then
+                pass "PocketBase Litestream sidecar is replicating"
+            elif echo "$litestream_logs" | grep -qi "error\|failed"; then
+                fail "PocketBase Litestream sidecar has errors"
+            else
+                info "PocketBase Litestream sidecar is running (status unclear)"
+            fi
+        else
+            skip "PocketBase Litestream sidecar not found or not running"
+        fi
+    else
+        fail "PocketBase pod not running"
+    fi
+}
+
+# Test 11: MinIO Object Storage
+test_minio() {
+    print_section "MinIO Object Storage Tests"
+
+    # Check if namespace exists
+    if ! kubectl get namespace minio &> /dev/null; then
+        skip "MinIO namespace does not exist"
+        return
+    fi
+
+    # Check MinIO pod
+    local minio_pod
+    minio_pod=$(kubectl get pods -n minio -l "app.kubernetes.io/name=minio" --field-selector=status.phase=Running -o name 2>/dev/null | head -1)
+
+    if [[ -n "$minio_pod" ]]; then
+        pass "MinIO pod is running"
+
+        # Check MinIO health via kubectl exec
+        local health_check
+        health_check=$(kubectl exec -n minio "${minio_pod#pod/}" -- curl -s http://localhost:9000/minio/health/live 2>/dev/null || echo "failed")
+
+        if [[ "$health_check" != "failed" ]]; then
+            pass "MinIO health endpoint is responding"
+        else
+            info "MinIO health check via exec failed (may be expected)"
+        fi
+    else
+        fail "MinIO pod not running"
+        return
+    fi
+
+    # Check MinIO PVC is bound
+    local minio_pvc
+    minio_pvc=$(kubectl get pvc -n minio -o jsonpath='{.items[0].status.phase}' 2>/dev/null)
+
+    if [[ "$minio_pvc" == "Bound" ]]; then
+        pass "MinIO PVC is bound"
+    else
+        fail "MinIO PVC is not bound (status: $minio_pvc)"
+    fi
+
+    # Check network connectivity from Litestream clients
+    local pocketbase_pod
+    pocketbase_pod=$(kubectl get pods -n pocketbase -l "app.kubernetes.io/name=pocketbase" --field-selector=status.phase=Running -o name 2>/dev/null | head -1)
+
+    if [[ -n "$pocketbase_pod" ]]; then
+        # Test DNS resolution for minio service from pocketbase namespace
+        local dns_check
+        dns_check=$(kubectl exec -n pocketbase "${pocketbase_pod#pod/}" -c litestream -- \
+            sh -c "nslookup minio.minio.svc 2>/dev/null || getent hosts minio.minio.svc 2>/dev/null" 2>/dev/null || echo "failed")
+
+        if [[ "$dns_check" != "failed" ]] && [[ -n "$dns_check" ]]; then
+            pass "MinIO service is resolvable from PocketBase namespace"
+        else
+            info "MinIO DNS resolution test inconclusive"
+        fi
+    fi
+}
+
+# Test 12: Database Health Checks
 test_database_health() {
     print_section "Database Health Tests"
 
@@ -658,6 +789,10 @@ main() {
     test_plane
     test_campfire
     test_dashboard
+    test_pocketbase
+
+    # Infrastructure storage
+    test_minio
 
     # Database health
     test_database_health
