@@ -157,10 +157,14 @@ else
 fi
 
 # MinIO (S3-compatible object storage for Litestream)
-if kubectl get pods -n minio -l app.kubernetes.io/name=minio --no-headers 2>/dev/null | grep -q "Running"; then
-    pass "MinIO is running"
+if kubectl get namespace minio &>/dev/null; then
+    if kubectl get pods -n minio -l app.kubernetes.io/name=minio --no-headers 2>/dev/null | grep -q "Running"; then
+        pass "MinIO is running"
+    else
+        fail "MinIO is not running"
+    fi
 else
-    fail "MinIO is not running"
+    warn "MinIO namespace not found (may not be deployed yet)"
 fi
 
 # Check PVCs are bound
@@ -461,6 +465,10 @@ REQUIRED_NETPOL_NS=(
     "pocketbase"
     "authentik"
     "plane"
+)
+
+# Optional namespaces for network policy check (only if deployed)
+OPTIONAL_NETPOL_NS=(
     "minio"
 )
 
@@ -470,6 +478,18 @@ for ns in "${REQUIRED_NETPOL_NS[@]}"; do
         pass "Network policies exist in $ns ($NETPOL_COUNT policies)"
     else
         warn "No network policies in $ns namespace"
+    fi
+done
+
+# Check optional namespaces (only if they exist)
+for ns in "${OPTIONAL_NETPOL_NS[@]}"; do
+    if kubectl get namespace "$ns" &>/dev/null; then
+        NETPOL_COUNT=$(kubectl get networkpolicies -n "$ns" --no-headers 2>/dev/null | wc -l)
+        if [ "$NETPOL_COUNT" -gt 0 ]; then
+            pass "Network policies exist in $ns ($NETPOL_COUNT policies)"
+        else
+            warn "No network policies in $ns namespace"
+        fi
     fi
 done
 
@@ -615,7 +635,11 @@ check_service "Prometheus" "monitoring" "kube-prometheus-stack-prometheus" "9090
 check_service "Alertmanager" "monitoring" "kube-prometheus-stack-alertmanager" "9093"
 check_service "Loki" "monitoring" "loki" "3100"
 check_service "Longhorn UI" "longhorn-system" "longhorn-frontend" "80"
-check_service "MinIO" "minio" "minio" "9000"
+
+# MinIO service (conditional - may not be deployed yet)
+if kubectl get namespace minio &>/dev/null; then
+    check_service "MinIO" "minio" "minio" "9000"
+fi
 
 section "Ingress Resources"
 
@@ -643,6 +667,10 @@ CRITICAL_SECRETS=(
     "monitoring:grafana-oidc-secret"
     "outline:outline-secrets"
     "n8n:n8n-secrets"
+)
+
+# Optional secrets (only check if namespace exists)
+OPTIONAL_SECRETS=(
     "minio:minio-credentials"
 )
 
@@ -653,6 +681,19 @@ for secret in "${CRITICAL_SECRETS[@]}"; do
         pass "Secret $NS/$NAME exists"
     else
         warn "Secret $NS/$NAME not found"
+    fi
+done
+
+# Check optional secrets (only if namespace exists)
+for secret in "${OPTIONAL_SECRETS[@]}"; do
+    NS="${secret%%:*}"
+    NAME="${secret##*:}"
+    if kubectl get namespace "$NS" &>/dev/null; then
+        if kubectl get secret "$NAME" -n "$NS" --no-headers 2>/dev/null | grep -q "$NAME"; then
+            pass "Secret $NS/$NAME exists"
+        else
+            warn "Secret $NS/$NAME not found"
+        fi
     fi
 done
 
