@@ -25,7 +25,13 @@ echo "Running Popeye cluster health scan..."
 
 # Run popeye and capture output
 REPORT_FILE=$(mktemp)
-if ! popeye --all-namespaces --force-exit-zero -o json > "$REPORT_FILE" 2>/dev/null; then
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SPINFILE="$SCRIPT_DIR/.popeye.yaml"
+SPINFILE_ARG=""
+if [ -f "$SPINFILE" ]; then
+    SPINFILE_ARG="-f $SPINFILE"
+fi
+if ! popeye --all-namespaces --force-exit-zero $SPINFILE_ARG -o json > "$REPORT_FILE" 2>/dev/null; then
     echo "Popeye scan failed, skipping"
     rm -f "$REPORT_FILE"
     exit 0

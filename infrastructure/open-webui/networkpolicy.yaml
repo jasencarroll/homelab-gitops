@@ -156,3 +156,48 @@ spec:
           port: 5432
         - protocol: TCP
           port: 8000
+---
+# Allow CloudNativePG pods egress for replication and API access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: open-webui-db-allow-egress
+  namespace: open-webui
+  labels:
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: open-webui-db
+  policyTypes:
+    - Egress
+  egress:
+    # Allow intra-cluster replication between CNPG pods
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: open-webui-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kubernetes API server (required for CNPG cluster coordination)
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
