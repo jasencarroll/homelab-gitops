@@ -6,7 +6,6 @@ resources:
   - cert-manager.yaml
   - cert-manager-helm.yaml
   - cloudflare-tunnel.yaml
-  - cloudnative-pg.yaml
   - external-dns.yaml
   - minio.yaml
   - open-webui.yaml

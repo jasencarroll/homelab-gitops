@@ -8,7 +8,6 @@ resources:
   - applications/cert-manager.yaml
   - applications/cert-manager-helm.yaml
   - applications/cloudflare-tunnel.yaml
-  - applications/cloudnative-pg.yaml
   - applications/external-dns.yaml
   - applications/minio.yaml
   - applications/open-webui.yaml
