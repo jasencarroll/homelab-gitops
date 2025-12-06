@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/managed-by: argocd
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   storageClassName: local-path
   resources:
     requests:
