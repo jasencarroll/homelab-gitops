@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: cloudflare-tunnel
+  labels:
+    app.kubernetes.io/name: cloudflare-tunnel
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: homelab
+    app.kubernetes.io/managed-by: argocd
+data:
+  config.yaml: |
+    tunnel: homelab
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    no-autoupdate: true
+
+    ingress:
+      # ArgoCD
+      - hostname: argocd.lab.axiomlayer.com
+        service: http://argocd-server.argocd.svc:80
+
+      # Auth portal
+      - hostname: auth.lab.axiomlayer.com
+        service: http://authelia.authelia.svc:9091
+
+      # Open WebUI
+      - hostname: ai.lab.axiomlayer.com
+        service: http://open-webui.open-webui.svc:8080
+
+      # Outline
+      - hostname: docs.lab.axiomlayer.com
+        service: http://outline.outline.svc:3000
+
+      # Catch-all
+      - service: http_status:404

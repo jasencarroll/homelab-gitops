@@ -9,8 +9,6 @@ resources:
   - postgres-cluster.yaml
   - deployment.yaml
   - service.yaml
-  - certificate.yaml
-  - ingress.yaml
   - networkpolicy.yaml
   - pdb.yaml
 labels:
