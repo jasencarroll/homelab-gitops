@@ -4,6 +4,7 @@ resources:
   - namespace.yaml
   - certificate.yaml
   - ingress.yaml
+  - watcher-nodes.yaml
 labels:
   - pairs:
       app.kubernetes.io/managed-by: argocd
